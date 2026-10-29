@@ -1,0 +1,6 @@
+.DS_Store
+mac/.build/
+mac/.swiftpm/
+__pycache__/
+*.pyc
+nesso-screen.png
