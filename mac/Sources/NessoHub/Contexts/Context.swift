@@ -23,6 +23,12 @@ extension HubContext {
   func handleKey(_ key: Int, action: String) {}
 }
 
+/// Drives the Modulino Pixels, whichever context owns the screen. The hub asks
+/// it after every refresh and sends what changed.
+protocol HubIndicator: AnyObject {
+  func pixels() -> Pixels
+}
+
 enum Palette {
   static let tile = "#263238"
   static let on = "#2E7D32"

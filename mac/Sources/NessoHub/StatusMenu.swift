@@ -1,16 +1,18 @@
 import AppKit
 
 /// The menu bar icon: whether the Nesso is connected, which context owns its
-/// screen, and the way out.
+/// screen, what the Claude sessions are doing, and the way out.
 final class StatusMenu: NSObject, NSMenuDelegate {
   private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
   private let link: Link
   private let hub: Hub
+  private let claude: ClaudeContext
   private let showReactions: () -> Void
 
-  init(link: Link, hub: Hub, showReactions: @escaping () -> Void) {
+  init(link: Link, hub: Hub, claude: ClaudeContext, showReactions: @escaping () -> Void) {
     self.link = link
     self.hub = hub
+    self.claude = claude
     self.showReactions = showReactions
     super.init()
     let menu = NSMenu()
@@ -34,6 +36,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     menu.removeAllItems()
     menu.addItem(disabled("Nesso: \(link.status)"))
     menu.addItem(disabled("Screen: \(hub.contextName)"))
+    menu.addItem(disabled("Claude: \(claude.summary)"))
     menu.addItem(.separator())
     menu.addItem(action("Choose Reactions…", #selector(chooseReactions), key: ","))
     menu.addItem(action("Open Config File", #selector(openConfig), key: ""))

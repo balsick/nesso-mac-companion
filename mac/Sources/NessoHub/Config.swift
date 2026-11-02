@@ -19,6 +19,30 @@ struct Config: Codable {
   /// Reactions sent on their own when someone joins a given meeting.
   var automations: [Automation] = []
 
+  /// The Claude page and the Modulino Pixels.
+  var claude = Claude()
+
+  struct Claude: Codable, Equatable {
+    /// Off, the Claude page never shows and the LEDs stay dark.
+    var enabled = true
+    /// Of the Modulino Pixels, 1 to 31. They sit next to the screen, and are
+    /// bright even low down.
+    var brightness = 4
+    /// Also list the sessions that run in the cloud, with Claude Code's
+    /// token from the keychain.
+    var cloud = true
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+      let values = try decoder.container(keyedBy: CodingKeys.self)
+      let defaults = Claude()
+      enabled = try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled
+      brightness = try values.decodeIfPresent(Int.self, forKey: .brightness) ?? defaults.brightness
+      cloud = try values.decodeIfPresent(Bool.self, forKey: .cloud) ?? defaults.cloud
+    }
+  }
+
   /// "When `joins` joins the meeting called `title` (or with code `code`),
   /// send `react`", once per meeting. Either `title` or `code` is enough to
   /// recognise the meeting; the title survives the code changing.
@@ -45,6 +69,7 @@ struct Config: Codable {
     reactions = try values.decodeIfPresent([String].self, forKey: .reactions) ?? defaults.reactions
     browser = try values.decodeIfPresent(String.self, forKey: .browser) ?? defaults.browser
     automations = try values.decodeIfPresent([Automation].self, forKey: .automations) ?? defaults.automations
+    claude = try values.decodeIfPresent(Claude.self, forKey: .claude) ?? defaults.claude
   }
 
   static let url = FileManager.default.homeDirectoryForCurrentUser

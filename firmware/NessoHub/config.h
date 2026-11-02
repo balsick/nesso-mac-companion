@@ -5,8 +5,8 @@
 
 // --- Protocol -------------------------------------------------------------
 // Must match Protocol.version in mac/Sources/NessoHub/Protocol.swift.
-#define HUB_PROTOCOL_VERSION 1
-#define HUB_FIRMWARE_VERSION "0.2.0"
+#define HUB_PROTOCOL_VERSION 2
+#define HUB_FIRMWARE_VERSION "0.3.0"
 
 // Kept to 8 characters: the 128-bit service UUID already takes 18 of the 31
 // advertising bytes.
@@ -60,6 +60,19 @@
 #define BATTERY_POLL_MS 5000
 #define TAP_FLASH_MS 180
 #define I2C_CLOCK_HZ 400000
+
+// --- Modulino Pixels ------------------------------------------------------
+// On the Qwiic connector, so on the same bus as the touch and the expander.
+// The Modulino library's 0x6C is the 8-bit form of this address.
+#define PIXELS_ADDR 0x36
+#define PIXELS_COUNT 8
+// Out of 31. The LEDs sit next to the screen and are bright even at this.
+#define PIXELS_DEFAULT_BRIGHTNESS 4
+#define PIXELS_FRAME_MS 30
+#define PIXELS_PULSE_MS 2400
+#define PIXELS_BLINK_MS 1000
+// How often to look for a module that was not there.
+#define PIXELS_PROBE_MS 3000
 
 // --- Colours (RGB565) -----------------------------------------------------
 #define COL_BG 0x0000

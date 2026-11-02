@@ -5,7 +5,7 @@ import Foundation
 /// JSON object per line; see README.md for the message list.
 enum Wire {
   /// Must match HUB_PROTOCOL_VERSION in firmware/NessoHub/config.h.
-  static let version = 1
+  static let version = 2
   static let service = CBUUID(string: "8c3b0001-5b1e-4c39-9d5e-6f1a7e2b9c40")
   /// The Mac writes here.
   static let rx = CBUUID(string: "8c3b0002-5b1e-4c39-9d5e-6f1a7e2b9c40")
@@ -89,6 +89,22 @@ struct Page: Encodable, Equatable {
   static func == (a: Page, b: Page) -> Bool { Wire.encode(a) == Wire.encode(b) }
 }
 
+/// The Modulino Pixels: one entry per LED from the left; the LEDs past the end
+/// of `leds` stay dark.
+struct Pixels: Encodable, Equatable {
+  let t = "pixels"
+  /// Brightness, 0 to 31.
+  var b: Int
+  var leds: [Led]
+
+  struct Led: Encodable, Equatable {
+    /// "#RRGGBB".
+    var c: String
+    /// "pulse", "blink", or nil for a steady light.
+    var fx: String?
+  }
+}
+
 /// Folds accents and drops anything the firmware cannot draw.
 func asciiLabel(_ text: String) -> String {
   let folded = text.applyingTransform(.stripDiacritics, reverse: false) ?? text
@@ -104,4 +120,6 @@ struct Event: Decodable {
   let ids: [String]?
   let fw: String?
   let proto: Int?
+  /// How many LEDs the Nesso has on its Qwiic port: 0 without a Modulino Pixels.
+  let px: Int?
 }

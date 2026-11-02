@@ -10,6 +10,7 @@
 #include "config.h"
 #include "hw.h"
 #include "ble_link.h"
+#include "pixels.h"
 #include "ui.h"
 
 // --- Messages from the Mac -------------------------------------------------
@@ -21,6 +22,7 @@ static void sendHello() {
   doc["proto"] = HUB_PROTOCOL_VERSION;
   doc["w"] = SCREEN_W;
   doc["h"] = SCREEN_H;
+  doc["px"] = pixels::present() ? PIXELS_COUNT : 0;
   String out;
   serializeJson(doc, out);
   ble::send(out);
@@ -51,6 +53,8 @@ static void handleLine(const String& line) {
     }
   } else if (!strcmp(type, "icon")) {
     ui::addIcon(doc.as<JsonObjectConst>());
+  } else if (!strcmp(type, "pixels")) {
+    pixels::apply(doc.as<JsonObjectConst>());
   } else {
     Serial.printf("[rx] unknown message '%s'\n", type);
   }
@@ -58,8 +62,12 @@ static void handleLine(const String& line) {
 
 static void handleConnection(bool connected) {
   // Nothing to show until the Mac sends a page; it does so right after it
-  // subscribes and says hello.
-  if (!connected) ui::showWaiting();
+  // subscribes and says hello. The LEDs show the Mac's state, so they go
+  // dark with it rather than keep showing something stale.
+  if (!connected) {
+    ui::showWaiting();
+    pixels::clear();
+  }
 }
 
 // --- Events to the Mac -----------------------------------------------------
@@ -109,9 +117,10 @@ static void runCommand(String line) {
     int split = rest.indexOf(' ');
     hw::injectPress(rest.substring(0, split).toInt(), split < 0 ? 100 : rest.substring(split + 1).toInt());
   } else if (verb == "status") {
-    Serial.printf("[status] fw %s, ble %s, page %s, battery %d%%%s, heap %u\n", HUB_FIRMWARE_VERSION,
+    Serial.printf("[status] fw %s, ble %s, page %s, pixels %s, battery %d%%%s, heap %u\n", HUB_FIRMWARE_VERSION,
                   ble::connected() ? "connected" : "advertising", ui::hasPage() ? "yes" : "no",
-                  hw::batteryLevel(), hw::charging() ? " (charging)" : "", ESP.getFreeHeap());
+                  pixels::present() ? "yes" : "no", hw::batteryLevel(), hw::charging() ? " (charging)" : "",
+                  ESP.getFreeHeap());
   } else if (verb == "help") {
     Serial.println("commands: status | screen | tap <x> <y> | press <key> [ms] | help");
     Serial.println("          or a JSON message, e.g. {\"t\":\"page\",...}, as if the Mac sent it");
@@ -146,6 +155,7 @@ void setup() {
   Serial.println("\n[hub] Nesso Hub " HUB_FIRMWARE_VERSION);
 
   hw::begin();
+  pixels::begin();
   ui::begin();
   ui::showSplash();
   hw::onKey(onKey);
@@ -160,6 +170,7 @@ void loop() {
   hw::pollBattery();
   pollTaps();
   ui::tick();
+  pixels::tick();
   pollConsole();
   delay(1);
 }

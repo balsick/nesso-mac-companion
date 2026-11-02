@@ -22,6 +22,6 @@
   <key>NSBluetoothAlwaysUsageDescription</key>
   <string>Nesso Hub talks to the Nesso N1 companion screen over Bluetooth.</string>
   <key>NSAppleEventsUsageDescription</key>
-  <string>Nesso Hub controls Google Meet in your browser when you tap the Nesso.</string>
+  <string>Nesso Hub controls Google Meet in your browser, and opens your Claude sessions in the right Claude window, when you tap the Nesso.</string>
 </dict>
 </plist>

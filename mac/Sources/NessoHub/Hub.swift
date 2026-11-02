@@ -6,26 +6,33 @@ final class Hub {
   private let link: Link
   private let icons = IconStore()
   private let contexts: [HubContext]
+  private let indicator: HubIndicator?
   private var current: HubContext?
   /// Fires when the active context changes, for the menu bar.
   var onContextChange: (() -> Void)?
   var contextName: String { current?.name ?? "-" }
   private var lastPage: String?
+  private var lastPixels: String?
   private var timer: Timer?
 
-  init(link: Link, contexts: [HubContext]) {
+  init(link: Link, contexts: [HubContext], indicator: HubIndicator? = nil) {
     self.link = link
     self.contexts = contexts.sorted { $0.priority > $1.priority }
+    self.indicator = indicator
 
     for context in contexts {
       context.onChange = { [weak self] in self?.render() }
     }
     link.onReady = { [weak self] in
       self?.lastPage = nil
+      self?.lastPixels = nil
       self?.link.send(#"{"t":"hello"}"#)
       self?.render()
     }
-    link.onLost = { [weak self] in self?.lastPage = nil }
+    link.onLost = { [weak self] in
+      self?.lastPage = nil
+      self?.lastPixels = nil
+    }
     link.onLine = { [weak self] line in self?.handle(line) }
   }
 
@@ -48,11 +55,15 @@ final class Hub {
       onContextChange?()
     }
     guard link.isReady else { return }
-    let page = Wire.encode(active.page(icons: icons))
-    if page != lastPage {
-      lastPage = page
-      link.send(page)
-    }
+    send(Wire.encode(active.page(icons: icons)), last: &lastPage)
+    if let indicator { send(Wire.encode(indicator.pixels()), last: &lastPixels) }
+  }
+
+  /// Sends `line` unless it is what was sent last.
+  private func send(_ line: String, last: inout String?) {
+    guard line != last else { return }
+    last = line
+    link.send(line)
   }
 
   private func handle(_ line: String) {
@@ -62,7 +73,8 @@ final class Hub {
     }
     switch event.t {
     case "hello":
-      log("hub", "Nesso firmware \(event.fw ?? "?"), protocol \(event.proto ?? 0)")
+      let px = event.px ?? 0
+      log("hub", "Nesso firmware \(event.fw ?? "?"), protocol \(event.proto ?? 0), \(px > 0 ? "\(px) pixels" : "no pixels")")
       if event.proto != Wire.version { log("hub", "protocol mismatch: the Mac speaks \(Wire.version)") }
     case "tap":
       guard let id = event.id else { return }

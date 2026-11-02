@@ -90,6 +90,41 @@ if command == "meet-watch", CommandLine.arguments.count > 2 {
   exit(0)
 }
 
+// `nesso-hub claude-probe [seconds]` prints the Claude sessions as the Claude
+// page sees them, each time they change, for the seconds given (just once
+// without). It runs straight from the binary: the files need no permission,
+// and for the cloud sessions macOS asks once whether it may use Claude Code's
+// token.
+if command == "claude-probe" {
+  let seconds = CommandLine.arguments.count > 2 ? Int(CommandLine.arguments[2]) ?? 0 : 0
+  let sessions = ClaudeSessions(cloud: config.claude.cloud)
+  var last: ([ClaudeSessions.Session], [ClaudeCloud.Remote])?
+  // The cloud's first answer comes back on the main thread, so wait for it
+  // with the run loop going.
+  sessions.refresh()
+  RunLoop.main.run(until: Date().addingTimeInterval(sessions.cloud == nil ? 0 : 3))
+  for second in 0...seconds {
+    if second > 0 { RunLoop.main.run(until: Date().addingTimeInterval(1)) }
+    sessions.refresh()
+    let now = (sessions.sessions, sessions.cloud?.sessions ?? [])
+    if let last, last == now { continue }
+    last = now
+    print("--- \(Date().formatted(.dateTime.hour().minute().second()))")
+    if let problem = sessions.cloud?.problem { print("cloud: \(problem)") }
+    for remote in sessions.cloud?.sessions ?? [] {
+      let last = remote.lastEvent?.formatted(.dateTime.day().month().hour().minute()) ?? "?"
+      print("cloud lists \(remote.workerStatus)\(remote.bridge ? " (remote control)" : ""): \(remote.title) [\(remote.id)] last event \(last)")
+    }
+    if sessions.sessions.isEmpty { print("(nothing to show)") }
+    for session in sessions.sessions {
+      let wait = session.waitingFor.map { " (\($0))" } ?? ""
+      let pid = session.pid.map { " pid \($0)" } ?? ""
+      print("\(session.state)\(wait): \(session.name) [\(session.key)\(pid)] since \(session.since.formatted(.dateTime.hour().minute()))")
+    }
+  }
+  exit(0)
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private var link: Link!
   private var hub: Hub!
@@ -99,13 +134,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
     link = Link()
     let meet = MeetContext(browser: browser, reactions: config.reactions, automations: config.automations)
-    hub = Hub(link: link, contexts: [meet, IdleContext()])
+    let claude = ClaudeContext(config: config.claude)
+    hub = Hub(link: link, contexts: [meet, claude, IdleContext()], indicator: claude)
     reactionsWindow = ReactionsWindow(reactions: config.reactions) { reactions in
       config.reactions = reactions
       config.save()
       meet.reactions = reactions
     }
-    menu = StatusMenu(link: link, hub: hub) { [weak self] in self?.reactionsWindow.show() }
+    menu = StatusMenu(link: link, hub: hub, claude: claude) { [weak self] in self?.reactionsWindow.show() }
     link.onSettled = { [weak self] in
       log("hub", "running")
       self?.hub.start()
