@@ -50,18 +50,40 @@ struct Row: Encodable {
   var tiles: [Tile]
 }
 
+/// Hold-to-confirm on a side key: while the key is held the Nesso fills a
+/// full-screen loader, and once it is full the key sends "long" and the Nesso
+/// shows `done` until the next page.
+struct Hold: Encodable {
+  /// 1 or 2.
+  var k: Int
+  var label: String
+  var done: String
+  var icon: String?
+  var bg: String?
+
+  init(key: Int, label: String, done: String, icon: String? = nil, bg: String? = nil) {
+    k = key
+    self.label = asciiLabel(label)
+    self.done = asciiLabel(done)
+    self.icon = icon
+    self.bg = bg
+  }
+}
+
 struct Page: Encodable, Equatable {
   let t = "page"
   var title: String
   var sub: String?
   var accent: String?
   var rows: [Row]
+  var holds: [Hold]?
 
-  init(title: String, sub: String? = nil, accent: String? = nil, rows: [Row]) {
+  init(title: String, sub: String? = nil, accent: String? = nil, rows: [Row], holds: [Hold]? = nil) {
     self.title = asciiLabel(title)
     self.sub = sub.map(asciiLabel)
     self.accent = accent
     self.rows = rows
+    self.holds = holds
   }
 
   static func == (a: Page, b: Page) -> Bool { Wire.encode(a) == Wire.encode(b) }

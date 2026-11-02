@@ -35,12 +35,23 @@ struct Tile {
   int16_t x = 0, y = 0, w = 0, h = 0;
 };
 
+// Hold-to-confirm on a key: while it is held a full-screen loader fills up,
+// then the done screen says what is happening.
+struct Hold {
+  bool on = false;
+  String label;
+  String done;
+  String icon;
+  uint16_t bg = COL_RED;
+};
+
 struct Page {
   String title;
   String sub;
   uint16_t accent = COL_TEAL;
   uint8_t tileCount = 0;
   Tile tiles[MAX_TILES];
+  Hold holds[2];
 };
 
 static Page page;
@@ -48,6 +59,16 @@ static bool pageValid = false;
 static int8_t flashed = -1;
 static uint32_t flashUntilMs = 0;
 static int lastDrawnBattery = -1;
+
+// The key (0 or 1) whose loader or done screen covers the page, or -1.
+static int8_t holding = -1;
+static int8_t unwinding = -1;
+static int8_t doneKey = -1;
+static uint32_t lastHoldFrameMs = 0;
+static float lastProgress = 0;
+static float unwindFrom = 0;
+static uint32_t unwindStartMs = 0;
+static uint32_t doneUntilMs = 0;
 
 enum IconFormat : uint8_t { ICON_RGB565, ICON_A8 };
 
@@ -179,6 +200,8 @@ static void drawHeader(LovyanGFX* g) {
 }
 
 static void render() {
+  // The loader and the done screen cover the page until they end.
+  if (holding >= 0 || unwinding >= 0 || doneKey >= 0) return;
   LovyanGFX* g = target();
   g->fillScreen(COL_BG);
   drawHeader(g);
@@ -192,6 +215,32 @@ static void centeredText(LovyanGFX* g, const String& text, int16_t y, const lgfx
   g->setTextColor(colour);
   g->setTextDatum(textdatum_t::middle_center);
   g->drawString(text, SCREEN_W / 2, y);
+}
+
+// A quarter of the colour's brightness, for the loader's background.
+static uint16_t dim(uint16_t colour) { return (colour >> 2) & 0x39E7; }
+
+enum HoldFrame : uint8_t { HOLD_FILLING, HOLD_UNWINDING, HOLD_DONE };
+
+// A ring that fills clockwise from the top as `progress` goes from 0 to 1.
+static void drawHold(const Hold& hold, float progress, HoldFrame frame) {
+  LovyanGFX* g = target();
+  uint16_t bg = dim(hold.bg);
+  g->fillScreen(bg);
+
+  const int16_t cx = SCREEN_W / 2, cy = 96, outer = 54, inner = 44;
+  g->fillArc(cx, cy, outer, inner, 0, 360, COL_PANEL_ALT);
+  // LovyanGFX measures angles clockwise from 3 o'clock; start at 12.
+  float end = 270 + 360 * constrain(progress, 0.0f, 1.0f);
+  if (end > 270) g->fillArc(cx, cy, outer, inner, 270, min(end, 360.0f), hold.bg);
+  if (end > 360) g->fillArc(cx, cy, outer, inner, 0, end - 360, hold.bg);
+
+  Icon* icon = findIcon(hold.icon);
+  if (icon) drawIcon(g, *icon, cx - icon->w / 2, cy - icon->h / 2, bg, COL_TEXT);
+
+  centeredText(g, frame == HOLD_DONE ? hold.done : hold.label, 174, &fonts::FreeSansBold9pt7b, COL_TEXT);
+  if (frame == HOLD_FILLING) centeredText(g, "release to cancel", 200, &fonts::Font2, COL_MUTED);
+  flush();
 }
 
 // --- Public --------------------------------------------------------------
@@ -226,6 +275,20 @@ void applyPage(JsonObjectConst json, JsonArray missing) {
   page.sub = json["sub"] | "";
   page.accent = parseColor(json["accent"], COL_TEAL);
   page.tileCount = 0;
+
+  for (Hold& hold : page.holds) hold.on = false;
+  for (JsonObjectConst h : json["holds"].as<JsonArrayConst>()) {
+    int k = h["k"] | 0;
+    if (k < 1 || k > 2) continue;
+    Hold& hold = page.holds[k - 1];
+    hold.on = true;
+    hold.label = h["label"] | "";
+    hold.done = h["done"] | "";
+    hold.icon = h["icon"] | "";
+    hold.bg = parseColor(h["bg"], COL_RED);
+    if (hold.icon.length() && !findIcon(hold.icon)) missing.add(hold.icon);
+  }
+  for (uint8_t k = 1; k <= 2; k++) hw::setHold(k, page.holds[k - 1].on);
 
   int16_t y = HEADER_H + (page.sub.length() ? SUB_H : 0) + GAP;
   for (JsonObjectConst row : json["rows"].as<JsonArrayConst>()) {
@@ -264,6 +327,8 @@ void applyPage(JsonObjectConst json, JsonArray missing) {
 
   pageValid = true;
   if (flashed >= page.tileCount) flashed = -1;
+  // A new page is the Mac's answer to a finished hold.
+  doneKey = -1;
   render();
 }
 
@@ -344,10 +409,61 @@ String tapTile(int16_t x, int16_t y) {
   return "";
 }
 
+void keyAction(uint8_t index, const char* action) {
+  if (index < 1 || index > 2 || !pageValid) return;
+  const Hold& hold = page.holds[index - 1];
+  if (!strcmp(action, "cancel") && holding == index - 1) {
+    holding = -1;
+    unwinding = index - 1;
+    unwindFrom = lastProgress;
+    unwindStartMs = millis();
+  } else if (!strcmp(action, "long") && hold.on) {
+    holding = -1;
+    unwinding = -1;
+    doneKey = index - 1;
+    doneUntilMs = millis() + HOLD_DONE_MS;
+    drawHold(hold, 1, HOLD_DONE);
+  }
+}
+
 void tick() {
   if (!pageValid) return;
+  uint32_t now = millis();
+
+  for (uint8_t i = 0; i < 2; i++) {
+    uint32_t held = page.holds[i].on ? hw::heldMs(i + 1) : 0;
+    if (held < HOLD_SHOW_MS) continue;
+    if (holding != i || now - lastHoldFrameMs >= HOLD_FRAME_MS) {
+      holding = i;
+      unwinding = -1;
+      lastHoldFrameMs = now;
+      lastProgress = min(1.0f, (float)(held - HOLD_SHOW_MS) / (HOLD_MS - HOLD_SHOW_MS));
+      drawHold(page.holds[i], lastProgress, HOLD_FILLING);
+    }
+    return;
+  }
+  if (unwinding >= 0) {
+    float progress = unwindFrom - (float)(now - unwindStartMs) / HOLD_UNWIND_MS;
+    if (progress > 0) {
+      if (now - lastHoldFrameMs >= HOLD_FRAME_MS) {
+        lastHoldFrameMs = now;
+        drawHold(page.holds[unwinding], progress, HOLD_UNWINDING);
+      }
+      return;
+    }
+    unwinding = -1;
+    render();
+    return;
+  }
+  if (doneKey >= 0) {
+    if ((int32_t)(now - doneUntilMs) < 0) return;
+    doneKey = -1;
+    render();
+    return;
+  }
+
   bool dirty = false;
-  if (flashed >= 0 && (int32_t)(millis() - flashUntilMs) >= 0) {
+  if (flashed >= 0 && (int32_t)(now - flashUntilMs) >= 0) {
     flashed = -1;
     dirty = true;
   }

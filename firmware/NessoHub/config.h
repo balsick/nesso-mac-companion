@@ -6,7 +6,7 @@
 // --- Protocol -------------------------------------------------------------
 // Must match Protocol.version in mac/Sources/NessoHub/Protocol.swift.
 #define HUB_PROTOCOL_VERSION 1
-#define HUB_FIRMWARE_VERSION "0.1.0"
+#define HUB_FIRMWARE_VERSION "0.2.0"
 
 // Kept to 8 characters: the 128-bit service UUID already takes 18 of the 31
 // advertising bytes.
@@ -45,6 +45,15 @@
 #define BUTTON_POLL_MS 20
 #define BUTTON_DEBOUNCE_MS 30
 #define BUTTON_LONG_MS 800
+// A key the page gives a hold: its loader shows once the key has been down
+// HOLD_SHOW_MS, so a click never flashes it, and the hold fires at HOLD_MS.
+// After that the "done" screen stays until the next page, or HOLD_DONE_MS.
+#define HOLD_SHOW_MS 200
+#define HOLD_MS 1200
+#define HOLD_FRAME_MS 33
+// Let go early and the ring runs back to empty: this long from full.
+#define HOLD_UNWIND_MS 400
+#define HOLD_DONE_MS 4000
 #define TOUCH_POLL_MS 20
 #define TOUCH_RELEASE_POLLS 3
 #define TAP_SLOP_PX 10

@@ -76,7 +76,9 @@ static void sendEvent(const char* type, const char* key, const String& value, co
 }
 
 static void onKey(uint8_t index, const char* action) {
-  sendEvent("key", "k", String(index), action);
+  ui::keyAction(index, action);
+  // A cancelled hold never happened, as far as the Mac is concerned.
+  if (strcmp(action, "cancel")) sendEvent("key", "k", String(index), action);
 }
 
 static void pollTaps() {
@@ -103,12 +105,15 @@ static void runCommand(String line) {
   } else if (verb == "tap") {
     int split = rest.indexOf(' ');
     hw::injectTap(rest.substring(0, split).toInt(), rest.substring(split + 1).toInt());
+  } else if (verb == "press") {
+    int split = rest.indexOf(' ');
+    hw::injectPress(rest.substring(0, split).toInt(), split < 0 ? 100 : rest.substring(split + 1).toInt());
   } else if (verb == "status") {
     Serial.printf("[status] fw %s, ble %s, page %s, battery %d%%%s, heap %u\n", HUB_FIRMWARE_VERSION,
                   ble::connected() ? "connected" : "advertising", ui::hasPage() ? "yes" : "no",
                   hw::batteryLevel(), hw::charging() ? " (charging)" : "", ESP.getFreeHeap());
   } else if (verb == "help") {
-    Serial.println("commands: status | screen | tap <x> <y> | help");
+    Serial.println("commands: status | screen | tap <x> <y> | press <key> [ms] | help");
     Serial.println("          or a JSON message, e.g. {\"t\":\"page\",...}, as if the Mac sent it");
   } else {
     Serial.printf("unknown command '%s', try 'help'\n", verb.c_str());

@@ -3,7 +3,8 @@ import Foundation
 /// Google Meet in the browser: mic, camera and reactions.
 ///
 /// Takes the screen whenever a Meet tab has a call or a lobby open, even when
-/// the browser is in the background. KEY1 toggles the mic, KEY2 the camera.
+/// the browser is in the background. KEY1 toggles the mic, KEY2 the camera,
+/// and holding KEY1 down leaves the call.
 ///
 /// Also runs the automations, Nesso or not: in a call one of them matches, it
 /// searches the People panel for the person and reacts once they are in. The
@@ -117,7 +118,10 @@ final class MeetContext: HubContext {
       }
     }
 
-    return Page(title: "Meet", sub: state.inCall ? "in call" : "lobby", accent: "#00BFA5", rows: rows)
+    let leave = Hold(key: 1, label: "Leave call", done: "Leaving...",
+                     icon: icons.symbol("phone.down.fill", size: 40), bg: Palette.off)
+    return Page(title: "Meet", sub: state.inCall ? "in call" : "lobby", accent: "#00BFA5", rows: rows,
+                holds: state.inCall ? [leave] : nil)
   }
 
   func handleTap(_ id: String) {
@@ -129,8 +133,13 @@ final class MeetContext: HubContext {
   }
 
   func handleKey(_ key: Int, action: String) {
-    guard action == "click", state != nil else { return }
-    act(["op": key == 1 ? "mic" : "cam"])
+    guard let state else { return }
+    if action == "click" {
+      act(["op": key == 1 ? "mic" : "cam"])
+    } else if action == "long", key == 1, state.inCall {
+      log("meet", "leaving the call")
+      act(["op": "leave"])
+    }
   }
 
   // MARK: Actions
@@ -405,6 +414,7 @@ enum MeetScript {
         }
 
         if (cmd.op === 'mic' && mic) mic.click();
+        if (cmd.op === 'leave' && leave) leave.click();
         if (cmd.op === 'cam' && cam) cam.click();
         if (cmd.op === 'react') {
           var want = strip(cmd.emoji);

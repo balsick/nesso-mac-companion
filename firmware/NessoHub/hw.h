@@ -27,9 +27,17 @@ void injectTap(int16_t x, int16_t y);
 
 // Actions: "click" on a short press, "long" once a press passes BUTTON_LONG_MS.
 // index is 1 for KEY1 and 2 for KEY2, as printed on the case.
+//
+// A key with a hold fires "long" at HOLD_MS instead, and a release after
+// HOLD_SHOW_MS, once its loader is showing, is a "cancel" rather than a click.
 typedef void (*KeyHandler)(uint8_t index, const char* action);
 void onKey(KeyHandler handler);
 void pollKeys();
+void setHold(uint8_t index, bool hold);
+// How long the key has been down; 0 once it is up or its "long" has fired.
+uint32_t heldMs(uint8_t index);
+// Test aid for the serial console: the key reads as pressed for `ms`.
+void injectPress(uint8_t index, uint32_t ms);
 
 void pollBattery();
 int batteryLevel();

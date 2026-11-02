@@ -23,6 +23,8 @@ there is no browser extension to install.
   Chrome in the background:
   - mic and camera toggles, coloured by their state; the two side keys toggle
     them too;
+  - hold KEY1 to leave the call: a full-screen ring fills up while you hold,
+    and letting go early runs it back and cancels;
   - up to nine reactions. Any emoji in Meet's full picker works, not just the
     quick bar: the ones that are not in it are found through the picker's
     search, by the shortcodes Meet uses (`:United-Kingdom-flag:`).
@@ -44,8 +46,8 @@ arduino-cli lib install Arduino_Nesso_N1 ArduinoJson
 arduino-cli compile -b esp32:esp32:arduino_nesso_n1 -u -p /dev/cu.usbmodem101 firmware/NessoHub
 ```
 
-Over USB it also has a serial console (`status`, `screen`, `tap <x> <y>`, or a
-JSON message as if the Mac had sent it). `tools/` talks to it with nothing but
+Over USB it also has a serial console (`status`, `screen`, `tap <x> <y>`,
+`press <key> [ms]`, or a JSON message as if the Mac had sent it). `tools/` talks to it with nothing but
 the Python standard library:
 
 ```sh
@@ -139,7 +141,7 @@ Mac → Nesso:
 | `t` | Fields | |
 |---|---|---|
 | `hello` | | Asks the Nesso to introduce itself. |
-| `page` | `title`, `sub`, `accent`, `rows: [{h, tiles: [{id, label, icon, bg, fg, font}]}]` | Replaces the screen. Tiles share their row's width; `font` is `s`, `m`, `l` or `xl`. |
+| `page` | `title`, `sub`, `accent`, `rows: [{h, tiles: [{id, label, icon, bg, fg, font}]}]`, `holds: [{k, label, done, icon, bg}]` | Replaces the screen. Tiles share their row's width; `font` is `s`, `m`, `l` or `xl`. A key in `holds` becomes hold-to-confirm: see below. |
 | `icon` | `id`, `w`, `h`, `f`, `d` | An icon a page refers to: `f` is `rgb565` (big-endian) or `a8` (a mask tinted with the tile's `fg`), `d` is base64. |
 
 Nesso → Mac:
@@ -150,6 +152,12 @@ Nesso → Mac:
 | `need` | `ids` | Icons a page uses that the Nesso does not have. |
 | `tap` | `id` | A tile with an `id` was tapped. |
 | `key` | `k`, `a` | Side key `1` or `2`, action `click` or `long`. |
+
+A key the page lists in `holds` fires `long` after 1.2 s instead of 0.8 s.
+From 0.2 s on, the Nesso covers the screen with a ring that fills up, with the
+hold's `icon` and `label`; letting go before it is full runs the ring back
+to empty and sends nothing. Once full it sends `long` and shows `done` until the next page
+arrives, or for 4 s. A press shorter than 0.2 s is still a `click`.
 
 ## Limits
 

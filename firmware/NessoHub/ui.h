@@ -23,7 +23,13 @@ void addIcon(JsonObjectConst icon);
 // a tap gets feedback before the Mac answers.
 String tapTile(int16_t x, int16_t y);
 
-// Clears expired tap flashes and repaints the battery reading.
+// Drives the hold loader: "cancel" runs the ring back to empty and then puts
+// the page back, "long" shows the hold's done screen until the next page
+// arrives.
+void keyAction(uint8_t index, const char* action);
+
+// Clears expired tap flashes, repaints the battery reading, and animates the
+// loader of a key being held.
 void tick();
 bool hasPage();
 

@@ -91,6 +91,8 @@ struct KeyState {
   uint32_t changedAtMs = 0;
   uint32_t pressedAtMs = 0;
   bool longSent = false;
+  bool hold = false;
+  uint32_t injectedUntilMs = 0;
 };
 
 static KeyState keys[2];
@@ -100,6 +102,7 @@ static uint32_t lastKeyPollMs = 0;
 void onKey(KeyHandler handler) { keyHandler = handler; }
 
 static bool readKey(uint8_t i) {
+  if ((int32_t)(millis() - keys[i].injectedUntilMs) < 0) return true;
   // The keys sit on the I2C expander, active-low with a pull-up.
   return digitalRead(i == 0 ? KEY1 : KEY2) == LOW;
 }
@@ -122,14 +125,32 @@ void pollKeys() {
         k.pressedAtMs = now;
         k.longSent = false;
       } else if (!k.longSent && keyHandler) {
-        keyHandler(i + 1, "click");
+        bool loaderShown = k.hold && (now - k.pressedAtMs) >= HOLD_SHOW_MS;
+        keyHandler(i + 1, loaderShown ? "cancel" : "click");
       }
     }
-    if (k.down && !k.longSent && (now - k.pressedAtMs) >= BUTTON_LONG_MS) {
+    uint32_t longMs = k.hold ? HOLD_MS : BUTTON_LONG_MS;
+    // Not while a release is being debounced: a key let go just before the
+    // mark, or a loop held up past it, must not count as held.
+    if (k.down && k.rawDown && !k.longSent && (now - k.pressedAtMs) >= longMs) {
       k.longSent = true;
       if (keyHandler) keyHandler(i + 1, "long");
     }
   }
+}
+
+void setHold(uint8_t index, bool hold) {
+  if (index >= 1 && index <= 2) keys[index - 1].hold = hold;
+}
+
+uint32_t heldMs(uint8_t index) {
+  if (index < 1 || index > 2) return 0;
+  const KeyState& k = keys[index - 1];
+  return k.down && !k.longSent ? millis() - k.pressedAtMs : 0;
+}
+
+void injectPress(uint8_t index, uint32_t ms) {
+  if (index >= 1 && index <= 2) keys[index - 1].injectedUntilMs = millis() + ms;
 }
 
 // --- Battery -------------------------------------------------------------
