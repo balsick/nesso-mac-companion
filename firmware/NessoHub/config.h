@@ -29,11 +29,26 @@
 // --- Screen ---------------------------------------------------------------
 #define SCREEN_W 135
 #define SCREEN_H 240
-#define SCREEN_ROTATION 0
 
+// Set to 1 for a Nesso used upside down: turned 180° in the plane of the
+// screen, with the USB-C end on top, as in a back shell that holds the
+// Modulino Pixels above the Nesso with the cable going up. The screen turns,
+// taps follow it, and KEY1 and KEY2 keep their roles.
+// arduino-cli can also set it: --build-property
+// compiler.cpp.extra_flags=-DMOUNT_UPSIDE_DOWN=1
+#ifndef MOUNT_UPSIDE_DOWN
+#define MOUNT_UPSIDE_DOWN 0
+#endif
+
+// 2 is a half turn. The panel stays 135 x 240, and the driver mirrors its
+// window inside the controller's 240 x 320 memory, so nothing shifts.
+#define SCREEN_ROTATION (MOUNT_UPSIDE_DOWN ? 2 : 0)
+
+// The touch controller reports in the screen's rotation-0 frame; a half turn
+// mirrors both axes.
 #define TOUCH_SWAP_XY 0
-#define TOUCH_INVERT_X 0
-#define TOUCH_INVERT_Y 0
+#define TOUCH_INVERT_X MOUNT_UPSIDE_DOWN
+#define TOUCH_INVERT_Y MOUNT_UPSIDE_DOWN
 
 // --- Page limits ----------------------------------------------------------
 #define MAX_ROWS 8
@@ -73,6 +88,13 @@
 #define PIXELS_BLINK_MS 1000
 // How often to look for a module that was not there.
 #define PIXELS_PROBE_MS 3000
+// Sends the LEDs in reverse, so the first one in a "pixels" message is still
+// the leftmost for a module that sits the other way round. Turning the Nesso
+// upside down turns the Modulino with it, hence the default. Set it to 0 if
+// the Modulino is also screwed on rotated 180°, which undoes the turn.
+#ifndef PIXELS_REVERSE
+#define PIXELS_REVERSE MOUNT_UPSIDE_DOWN
+#endif
 
 // --- Colours (RGB565) -----------------------------------------------------
 #define COL_BG 0x0000

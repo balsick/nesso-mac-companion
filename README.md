@@ -65,6 +65,18 @@ arduino-cli lib install Arduino_Nesso_N1 ArduinoJson
 arduino-cli compile -b esp32:esp32:arduino_nesso_n1 -u -p /dev/cu.usbmodem101 firmware/NessoHub
 ```
 
+For a Nesso used upside down, with the USB-C end on top, set
+`MOUNT_UPSIDE_DOWN` to 1 in `firmware/NessoHub/config.h`, or pass it when
+building:
+
+```sh
+arduino-cli compile -b esp32:esp32:arduino_nesso_n1 --build-property compiler.cpp.extra_flags=-DMOUNT_UPSIDE_DOWN=1 -u -p /dev/cu.usbmodem101 firmware/NessoHub
+```
+
+The screen and the touch turn half way round, and the Modulino Pixels LEDs
+keep their left-to-right order. If the Modulino is also screwed on rotated
+180°, set `PIXELS_REVERSE` to 0.
+
 Over USB it also has a serial console (`status`, `screen`, `tap <x> <y>`,
 `press <key> [ms]`, or a JSON message as if the Mac had sent it). `tools/` talks to it with nothing but
 the Python standard library:

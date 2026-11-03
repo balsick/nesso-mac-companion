@@ -50,10 +50,11 @@ static void show(uint32_t now) {
   uint8_t frame[PIXELS_COUNT * 4];
   for (uint8_t i = 0; i < PIXELS_COUNT; i++) {
     float k = level(leds[i].fx, now);
-    frame[i * 4] = 0xE0 | (brightness & 0x1F);
-    frame[i * 4 + 1] = (uint8_t)(leds[i].b * k);
-    frame[i * 4 + 2] = (uint8_t)(leds[i].g * k);
-    frame[i * 4 + 3] = (uint8_t)(leds[i].r * k);
+    uint8_t* out = frame + (PIXELS_REVERSE ? PIXELS_COUNT - 1 - i : i) * 4;
+    out[0] = 0xE0 | (brightness & 0x1F);
+    out[1] = (uint8_t)(leds[i].b * k);
+    out[2] = (uint8_t)(leds[i].g * k);
+    out[3] = (uint8_t)(leds[i].r * k);
   }
   if (shownValid && !memcmp(frame, shown, sizeof(frame))) return;
 
