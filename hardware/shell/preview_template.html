@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guscio Nesso N1</title>
+<style>
+  :root { --bg: #f4f5f7; --fg: #1d1f23; --muted: #5d636e; --panel: rgba(255,255,255,0.92); --line: #d9dce1; --accent: #d96a12; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #16181c; --fg: #e8eaee; --muted: #9aa1ad; --panel: rgba(30,33,38,0.92); --line: #333840; --accent: #f08a3a; }
+  }
+  :root[data-theme="dark"] { --bg: #16181c; --fg: #e8eaee; --muted: #9aa1ad; --panel: rgba(30,33,38,0.92); --line: #333840; --accent: #f08a3a; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #view { position: fixed; inset: 0; }
+  .panel { position: fixed; top: 16px; left: 16px; max-width: min(320px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; backdrop-filter: blur(6px); }
+  .panel h1 { font-size: 15px; margin: 0 0 6px; }
+  .panel p { margin: 0 0 8px; color: var(--muted); font-size: 12.5px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 6px 0; }
+  label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+  button { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; }
+  button.on { border-color: var(--accent); color: var(--accent); }
+  .facts { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 12.5px; }
+  .facts div { display: flex; justify-content: space-between; gap: 10px; }
+  .facts span:last-child { color: var(--muted); text-align: right; }
+  .hint { position: fixed; bottom: 12px; right: 16px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div class="panel">
+  <h1>/*TITLE*/</h1>
+  <p>Arancio: i due pezzi da stampare, guscio e spessore (più chiaro). Grigio: Nesso N1. Blu: Modulino Pixels.</p>
+  <div class="row">
+    <label><input type="checkbox" id="tNesso" checked> Nesso</label>
+    <label><input type="checkbox" id="tMod" checked> Modulino</label>
+    <label><input type="checkbox" id="tCable" checked> Cavi e viti</label>
+  </div>
+  <div class="row">
+    <button id="bFront">Davanti</button>
+    <button id="bBack">Dietro</button>
+    <button id="bSide">Lato</button>
+    <button id="bExplode">Esploso</button>
+    <button id="bPrint">Come si stampa</button>
+    <button id="bTop">Modulino sopra</button>
+  </div>
+  <div class="facts">
+    <div><span>Ingombro guscio</span><span>/*SIZE*/</span></div>
+    <div><span>Pezzi da stampare</span><span>guscio + spessore, insieme</span></div>
+    <div><span>Viti</span><span id="screwsTxt"></span></div>
+    <div><span>Percorso cavo Qwiic</span><span id="cableLen">–</span></div>
+    <div><span>Stampa</span><span>sul retro, senza supporti</span></div>
+  </div>
+</div>
+<div class="hint">Trascina per ruotare · rotella per zoom · tasto destro per spostare</div>
+
+<script>/*THREE*/</script>
+<script>/*ORBIT*/</script>
+<script>
+const CFG = /*CFG*/;
+const STL = { shell: "/*SHELL*/", spacer: "/*SPACER*/", nesso: "/*NESSO*/", modulino: "/*MODULINO*/" };
+
+function parseStl(b64) {
+  const bin = atob(b64), buf = new ArrayBuffer(bin.length), u8 = new Uint8Array(buf);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  const dv = new DataView(buf), n = dv.getUint32(80, true), pos = new Float32Array(n * 9);
+  for (let t = 0; t < n; t++) {
+    const o = 84 + t * 50 + 12;
+    for (let k = 0; k < 9; k++) pos[t * 9 + k] = dv.getFloat32(o + k * 4, true);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+// Model coordinates: X right, Y front->back, Z up. Three: X right, Y up, Z toward the viewer.
+const USE = new THREE.Matrix4().set(1, 0, 0, 0,  0, 0, 1, 0,  0, -1, 0, 0,  0, 0, 0, 1);
+function useGeom(g) { g.applyMatrix4(USE); return g; }
+// A part saved lying on its back (print Z = back - Y, print Y = Z) only needs shifting.
+function printGeom(g, back) { g.translate(0, 0, -back); return g; }
+function useVec(x, y, z) { return new THREE.Vector3(x, z, -y); }
+function boxUse(x0, x1, y0, y1, z0, z1, mat) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, z1 - z0, y1 - y0), mat);
+  m.position.copy(useVec((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
+  return m;
+}
+
+const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.getElementById("view").appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(dark ? 0x16181c : 0xf4f5f7);
+const camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+scene.add(new THREE.HemisphereLight(0xffffff, dark ? 0x30343a : 0xb8bcc4, 0.75));
+const sun = new THREE.DirectionalLight(0xffffff, 0.7); sun.position.set(60, 120, 140); scene.add(sun);
+const rim = new THREE.DirectionalLight(0xffffff, 0.35); rim.position.set(-120, 40, -100); scene.add(rim);
+
+const matShell = new THREE.MeshStandardMaterial({ color: 0xe0782a, roughness: 0.65, metalness: 0.0 });
+const matNesso = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.55 });
+const matMod = new THREE.MeshStandardMaterial({ color: 0x1b5fbf, roughness: 0.5 });
+const matPlug = new THREE.MeshStandardMaterial({ color: 0xe9e4da, roughness: 0.6 });
+const matMetal = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.35, metalness: 0.8 });
+const matCable = new THREE.MeshStandardMaterial({ color: 0x202020, roughness: 0.7 });
+
+const shell = new THREE.Mesh(printGeom(parseStl(STL.shell), CFG.yBack), matShell);
+// The spacer stays in the Nesso's recess whichever way round the shell goes.
+const spacer = new THREE.Mesh(printGeom(parseStl(STL.spacer), CFG.spacerBack),
+  new THREE.MeshStandardMaterial({ color: 0xf2a65e, roughness: 0.65, metalness: 0.0 }));
+const nesso = new THREE.Group();
+nesso.add(new THREE.Mesh(useGeom(parseStl(STL.nesso)), matNesso));
+const modulino = new THREE.Group();
+modulino.add(new THREE.Mesh(useGeom(parseStl(STL.modulino)), matMod));
+const extras = new THREE.Group();
+
+// Nesso screen with a few session rows, and the KEY1 pill.
+const cv = document.createElement("canvas"); cv.width = 135; cv.height = 240;
+const cx = cv.getContext("2d"); cx.fillStyle = "#0b0d10"; cx.fillRect(0, 0, 135, 240);
+[["#f08a1a", "In attesa"], ["#f08a1a", "In attesa"], ["#2fbf5b", "Finita"], ["#3a7bf0", "Lavora"], ["#3a7bf0", "Lavora"]].forEach(([c, t], i) => {
+  cx.fillStyle = c; cx.fillRect(8, 20 + i * 42, 10, 30);
+  cx.fillStyle = "#d8dce2"; cx.font = "15px sans-serif"; cx.fillText(t, 26, 41 + i * 42);
+});
+const screen = new THREE.Mesh(new THREE.PlaneGeometry(15, 25.1),
+  new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv) }));
+screen.position.copy(useVec(12, -0.03, 29.05)); nesso.add(screen);
+nesso.add(boxUse(7, 17, -0.9, 0, 9.25, 11.55, new THREE.MeshStandardMaterial({ color: 0x9be37a, roughness: 0.4 })));
+
+// LEDs: the colours the firmware uses.
+const ledCols = [0xff8a1a, 0xff8a1a, 0x2fdf5b, 0x3a7bf0, 0x3a7bf0, 0xd0d0d0, 0x222222, 0x222222];
+const leds = ledCols.map((c, i) => {
+  const m = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: c === 0x222222 ? 0 : 0.9 });
+  const x = 12 + (i - 3.5) * 3.31;
+  const mesh = boxUse(x - 1, x + 1, CFG.front - 0.85, CFG.front, CFG.ledZ - 1, CFG.ledZ + 1, m);
+  modulino.add(mesh); return m;
+});
+
+// Qwiic plugs and cable, USB-C plug, M2 screws into the Nesso, M3 screws through the Modulino.
+// The Modulino, its plug and its screws move together when it goes on top.
+const modPlug = new THREE.Group(), modScrews = new THREE.Group();
+const plugN = boxUse(-4.5, 0, 2.4, 5.7, 21, 27, matPlug);
+modPlug.add(boxUse(...CFG.plugM, matPlug));
+const curves = [CFG.cable, CFG.cableTop].map(c => new THREE.CatmullRomCurve3(c.map(p => useVec(...p))));
+const cables = curves.map(c => new THREE.Mesh(new THREE.TubeGeometry(c, 80, 0.9, 10, false), matCable));
+const usb = boxUse(...CFG.usb, new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 }));
+const usbCable = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 30, 16), matCable);
+usbCable.position.copy(useVec(12, 4.1, CFG.usbCableZ));
+extras.add(plugN, ...cables, usb, usbCable, modPlug, modScrews);
+for (const sx of [3, 21]) {
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 2.0, 24), matMetal);
+  head.rotation.x = Math.PI / 2; head.position.copy(useVec(sx, CFG.nessoScrewY, 3)); extras.add(head);
+}
+document.getElementById("screwsTxt").textContent = CFG.screws;
+const matSocket = new THREE.MeshStandardMaterial({ color: 0x3c4046, roughness: 0.5, metalness: 0.6 });
+for (const sx of [-16, 16]) for (const sz of [-8, 8]) {
+  const x = 12 + sx, z = CFG.ledZ + sz;
+  const parts = [[new THREE.CylinderGeometry(2.75, 2.75, 3.0, 32), matMetal, CFG.front - 1.5],
+                 [new THREE.CylinderGeometry(1.3, 1.3, 0.1, 6), matSocket, CFG.front - 3.02],
+                 [new THREE.CylinderGeometry(1.5, 1.5, 6.0, 16), matMetal, CFG.front + 3.0]];
+  for (const [g, mat, y] of parts) {
+    const m = new THREE.Mesh(g, mat);
+    m.rotation.x = Math.PI / 2; m.position.copy(useVec(x, y, z)); modScrews.add(m);
+  }
+}
+
+const assembly = new THREE.Group();
+assembly.add(shell, spacer, nesso, modulino, extras);
+scene.add(assembly);
+
+// Views and toggles.
+let exploded = false, printMode = false, onTop = false;
+function layout() {
+  const e = exploded ? 1 : 0, dz = onTop ? CFG.topDz : 0;
+  // On top the shell turns 180 degrees in the screen plane; the Nesso and the spacer stay put.
+  shell.rotation.set(0, 0, onTop ? Math.PI : 0);
+  shell.position.set(onTop ? 24 : 0, onTop ? 48 : 0, 0);
+  spacer.rotation.set(0, 0, 0); spacer.position.copy(useVec(0, -11 * e, 0));
+  nesso.position.copy(useVec(0, -22 * e, 0));
+  modulino.position.copy(useVec(0, -14 * e, dz));
+  extras.position.copy(useVec(0, -22 * e, 0));
+  // In the extras group, which moves with the Nesso: the screws stay in front of the Modulino,
+  // its plug travels with it.
+  modScrews.position.copy(useVec(0, 0, dz));
+  modPlug.position.copy(useVec(0, 8 * e, dz));
+  cables[0].visible = !onTop; cables[1].visible = onTop;
+  document.getElementById("cableLen").textContent =
+    "≈ " + Math.round(curves[onTop ? 1 : 0].getLength() + 10) + " mm (cavo da 60 mm)";
+  assembly.position.copy(useVec(12, 8, onTop ? CFG.centerZTop : CFG.centerZ)).negate();
+}
+function setView(dir) {
+  const d = 190;
+  const v = { front: [0.55, 0.35, 1], back: [-0.6, 0.35, -1], side: [-1, 0.25, 0.15], print: [0.6, 0.9, 0.9] }[dir];
+  camera.position.set(v[0], v[1], v[2]).normalize().multiplyScalar(d);
+  controls.target.set(0, 0, 0); controls.update();
+}
+function setPrint(on) {
+  printMode = on;
+  document.getElementById("bPrint").classList.toggle("on", on);
+  nesso.visible = !on && tNesso.checked; modulino.visible = !on && tMod.checked; extras.visible = !on && tCable.checked;
+  if (on) {
+    // Both parts lie on their backs, side by side, as in the print job.
+    assembly.position.set(0, 0, 0);
+    shell.rotation.set(-Math.PI / 2, 0, 0);
+    shell.position.set(-26, CFG.yBack - 8, CFG.printZ);
+    spacer.rotation.set(-Math.PI / 2, 0, 0);
+    spacer.position.set(12, CFG.spacerBack - 8, 3.2);
+    bed.visible = true; setView("print");
+  } else {
+    bed.visible = false; layout(); setView("front");
+  }
+}
+const bed = new THREE.GridHelper(160, 32, dark ? 0x5a6270 : 0x9aa3b0, dark ? 0x2e333b : 0xd3d7dd);
+bed.position.y = -8; bed.visible = false; scene.add(bed);
+
+const tNesso = document.getElementById("tNesso"), tMod = document.getElementById("tMod"), tCable = document.getElementById("tCable");
+tNesso.onchange = () => nesso.visible = tNesso.checked && !printMode;
+tMod.onchange = () => modulino.visible = tMod.checked && !printMode;
+tCable.onchange = () => extras.visible = tCable.checked && !printMode;
+document.getElementById("bFront").onclick = () => { if (printMode) setPrint(false); setView("front"); };
+document.getElementById("bBack").onclick = () => { if (printMode) setPrint(false); setView("back"); };
+document.getElementById("bSide").onclick = () => { if (printMode) setPrint(false); setView("side"); };
+document.getElementById("bExplode").onclick = (ev) => {
+  if (printMode) setPrint(false);
+  exploded = !exploded; ev.target.classList.toggle("on", exploded); layout();
+};
+document.getElementById("bPrint").onclick = () => setPrint(!printMode);
+document.getElementById("bTop").onclick = (ev) => {
+  if (printMode) setPrint(false);
+  onTop = !onTop; ev.target.classList.toggle("on", onTop); layout();
+};
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h); camera.aspect = w / h;
+  camera.fov = w < 600 ? 50 : 35; camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize); resize(); layout(); setView("front");
+
+const t0 = performance.now();
+renderer.setAnimationLoop(() => {
+  const t = (performance.now() - t0) / 1000;
+  const blink = Math.sin(t * Math.PI * 2 / 1.2) > 0 ? 1 : 0.08;
+  leds[0].emissiveIntensity = leds[1].emissiveIntensity = blink;
+  const breathe = 0.35 + 0.55 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 / 2.4));
+  leds[3].emissiveIntensity = leds[4].emissiveIntensity = breathe;
+  controls.update(); renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
