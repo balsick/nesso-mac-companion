@@ -167,13 +167,14 @@ both each second; it needs no setup and no permission.
 Sessions that do not run on this Mac, in the cloud or on another computer
 under Remote Control, are known only to Anthropic's servers. Nesso Hub lists
 them every ten seconds with the API Claude Code uses for its own list,
-signed in with Claude Code's token from the keychain. The first time, macOS
-asks whether Nesso Hub may use "Claude Code-credentials": "Always Allow"
-answers it for good, "Allow" until the token expires or Nesso Hub restarts.
-Nesso Hub keeps the token once read and reads the keychain again only when
-the token has expired or is refused, at most every ten minutes; after a
-"Deny" it stops asking until it restarts. A cloud session is done once it
-went idle after working, until you open it.
+signed in with Claude Code's token from the keychain. It reads the token
+with `/usr/bin/security`, as Claude Code does: Claude Code writes its
+keychain items with that tool, so they trust it, and macOS asks nothing,
+not for a new login, not after a rebuild, not at night. Should an item ask
+after all, a "Deny" stops Nesso Hub reading it until it restarts. Nesso Hub
+keeps the token once read and reads the keychain again only when the token
+has expired or is refused, at most every ten minutes. A cloud session is
+done once it went idle after working, until you open it.
 
 A token answers only for the organisation its login chose, so the cloud
 sessions of a Claude app profile signed in to another organisation need a
@@ -186,7 +187,7 @@ CLAUDE_CONFIG_DIR=~/.claude-other claude auth login
 
 and choose that organisation in the browser. Nesso Hub uses every Claude
 Code login in the keychain and merges what they list; it finds a new one
-within ten minutes, and macOS asks once whether it may read it. It matches
+within ten minutes. It matches
 each login to its folder among the ones in your home folder: Claude Code
 names a login's keychain item after the SHA-256 of its folder's path. Logging
 in again in the same folder is picked up the same way.
@@ -194,10 +195,12 @@ in again in the same folder is picked up the same way.
 A token lasts a few hours, and only Claude Code renews it, when it runs with
 that login's folder: the Claude app gives its own sessions a token of its
 own, so even the default login lapses if Claude Code only runs inside the
-app. Ten minutes before a token expires, Nesso Hub runs `claude mcp list`
-with its folder: loading the organisation's claude.ai connectors, Claude
-Code checks the token and renews it, under its own lock, without a model
-call. The log says whether it did. Nesso Hub never renews a token itself,
+app. Four and a half minutes before a token expires, Nesso Hub runs
+`claude mcp list` with its folder: loading the organisation's claude.ai
+connectors, Claude Code checks the token and renews it, under its own lock,
+without a model call. It renews only in a token's last five minutes, so
+asking earlier would start every MCP server for nothing. The log says
+whether it did. Nesso Hub never renews a token itself,
 which would spend the refresh token behind Claude Code's back. A login whose
 folder is not right in your home folder cannot be renewed this way, and one
 that lapsed more than a day ago counts as abandoned and only goes to the log.
@@ -250,9 +253,7 @@ open -n -W "/Applications/Nesso Hub.app" --stdout out.txt --args meet-probe
 - `render-sessions out.png [--compact]`: draws the sessions window to a PNG,
   with the sessions of this Mac only, so that it needs no keychain.
 - `claude-probe [seconds]`: the Claude sessions as the Claude page sees them,
-  and what the cloud API lists, printed each time they change. Run through
-  the app, it uses the app's keychain permission; run straight from the
-  binary, macOS asks for its own.
+  and what the cloud API lists, printed each time they change.
 
 ## Protocol
 

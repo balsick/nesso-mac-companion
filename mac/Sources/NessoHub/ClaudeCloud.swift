@@ -22,13 +22,14 @@ import Security
 /// Code checks the token first and renews it, under its own lock. Renewing it
 /// here instead would spend the refresh token behind Claude Code's back.
 ///
-/// Reading another app's keychain item can make macOS ask for permission, on
-/// every read unless it was told "Always Allow". So a token is kept once read,
-/// and its item is read again only when the token has expired or the API
-/// refuses it, and not more than every ten minutes; once the user says no,
-/// not until Nesso Hub restarts. Listing the items reads only their names,
-/// which asks nothing. The reads and the requests run off the main thread,
-/// since a prompt blocks the read until it is answered.
+/// The token is read through /usr/bin/security, which Claude Code's items
+/// trust, so macOS asks nothing (see `readToken`). Still, a token is kept
+/// once read, and its item is read again only when the token has expired or
+/// the API refuses it, and not more than every ten minutes; should an item
+/// ask after all and the user say no, not until Nesso Hub restarts. Listing
+/// the items reads only their names, which asks nothing either. The reads
+/// and the requests run off the main thread, since a question would block
+/// the read until it is answered.
 final class ClaudeCloud {
   struct Remote: Equatable {
     var id: String
@@ -53,8 +54,9 @@ final class ClaudeCloud {
   /// Each keychain read can be a prompt, and new logins are rare.
   private static let keychainInterval: TimeInterval = 600
   /// How long before a token expires Claude Code is asked to renew it, and
-  /// how often again if it did not.
-  private static let renewAhead: TimeInterval = 600
+  /// how often again if it did not. Claude Code renews it only in its last
+  /// five minutes, and asked earlier it starts every MCP server for nothing.
+  private static let renewAhead: TimeInterval = 270
   private static let renewRetry: TimeInterval = 120
   private static let home = FileManager.default.homeDirectoryForCurrentUser
   private static let cli: URL? = ["\(home.path)/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]
@@ -323,23 +325,44 @@ final class ClaudeCloud {
 
   /// Claude Code keeps a login in the keychain as JSON:
   /// {"claudeAiOauth": {"accessToken": "…", "expiresAt": <ms>, …}}.
+  ///
+  /// Read through /usr/bin/security, as Claude Code reads it itself. Claude
+  /// Code writes the item with that tool, so the item trusts it and macOS
+  /// asks nothing, whatever signs Nesso Hub. Read by Nesso Hub itself, the
+  /// item asks until it is told "Always Allow", for every login, again after
+  /// a build signed differently, and fails in the night, when the Mac cannot
+  /// show the question.
   private static func readToken(_ service: String) -> Result<Token, Problem> {
-    let query: [String: Any] = [
-      kSecClass as String: kSecClassGenericPassword,
-      kSecAttrService as String: service,
-      kSecMatchLimit as String: kSecMatchLimitOne,
-      kSecReturnData as String: true,
-    ]
-    var item: CFTypeRef?
-    let status = SecItemCopyMatching(query as CFDictionary, &item)
-    guard status == errSecSuccess, let data = item as? Data else {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+    process.arguments = ["find-generic-password", "-s", service, "-w"]
+    let output = Pipe()
+    process.standardInput = FileHandle.nullDevice
+    process.standardOutput = output
+    process.standardError = FileHandle.nullDevice
+    do {
+      try process.run()
+    } catch {
+      return .failure(Problem(message: "cannot run /usr/bin/security: \(error.localizedDescription)"))
+    }
+    // No time limit: should the item ask after all, the question waits for
+    // an answer, as SecItemCopyMatching would.
+    let printed = output.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+
+    // `security` exits with the low byte of the keychain's status.
+    let status = process.terminationStatus
+    guard status == 0 else {
       switch status {
-      case errSecItemNotFound: return .failure(Problem(message: "Claude Code is not signed in on this Mac"))
-      case errSecUserCanceled, errSecAuthFailed:
+      case errSecItemNotFound & 0xFF: return .failure(Problem(message: "Claude Code is not signed in on this Mac"))
+      case errSecUserCanceled & 0xFF, errSecAuthFailed & 0xFF:
         return .failure(Problem(message: "not allowed to read Claude Code's token", refused: true))
-      default: return .failure(Problem(message: "no access to Claude Code's token (\(status))"))
+      default: return .failure(Problem(message: "no access to Claude Code's token (security exited with \(status))"))
       }
     }
+    // Printed as it is, or in hex when it is not all printable.
+    let text = String(decoding: printed, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    let data = text.hasPrefix("{") ? Data(text.utf8) : hexData(text) ?? Data(text.utf8)
 
     struct Stored: Decodable {
       var claudeAiOauth: OAuth?
@@ -353,6 +376,18 @@ final class ClaudeCloud {
       return .failure(Problem(message: "Claude Code's token does not read"))
     }
     return .success(Token(value: value, expiresAt: oauth.expiresAt.map { Date(timeIntervalSince1970: $0 / 1000) }))
+  }
+
+  /// Nil unless `text` is pairs of hex digits.
+  private static func hexData(_ text: String) -> Data? {
+    let digits = Array(text.utf8)
+    guard !digits.isEmpty, digits.count % 2 == 0 else { return nil }
+    var data = Data(capacity: digits.count / 2)
+    for index in stride(from: 0, to: digits.count, by: 2) {
+      guard let byte = UInt8(String(decoding: digits[index...index + 1], as: UTF8.self), radix: 16) else { return nil }
+      data.append(byte)
+    }
+    return data
   }
 
   private func list(token: String, login: String) -> Result<[Remote], Problem> {
