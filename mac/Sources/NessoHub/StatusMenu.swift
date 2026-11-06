@@ -7,12 +7,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
   private let link: Link
   private let hub: Hub
   private let claude: ClaudeContext
+  private let sessionsWindow: SessionsWindow
   private let showReactions: () -> Void
 
-  init(link: Link, hub: Hub, claude: ClaudeContext, showReactions: @escaping () -> Void) {
+  init(link: Link, hub: Hub, claude: ClaudeContext, sessionsWindow: SessionsWindow,
+       showReactions: @escaping () -> Void) {
     self.link = link
     self.hub = hub
     self.claude = claude
+    self.sessionsWindow = sessionsWindow
     self.showReactions = showReactions
     super.init()
     let menu = NSMenu()
@@ -38,6 +41,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     menu.addItem(disabled("Screen: \(hub.contextName)"))
     menu.addItem(disabled("Claude: \(claude.summary)"))
     menu.addItem(.separator())
+    let sessions = action("Floating Sessions Window", #selector(toggleSessions), key: "")
+    sessions.state = sessionsWindow.isVisible ? .on : .off
+    menu.addItem(sessions)
     menu.addItem(action("Choose Reactions…", #selector(chooseReactions), key: ","))
     menu.addItem(action("Open Config File", #selector(openConfig), key: ""))
     menu.addItem(action("Show Log", #selector(openLog), key: "l"))
@@ -56,6 +62,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     entry.target = self
     return entry
   }
+
+  @objc private func toggleSessions() { sessionsWindow.toggle() }
 
   @objc private func chooseReactions() { showReactions() }
 

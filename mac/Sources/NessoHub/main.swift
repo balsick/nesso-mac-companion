@@ -49,6 +49,26 @@ if CommandLine.arguments.dropFirst().first == "render-reactions", CommandLine.ar
   exit(0)
 }
 
+// `nesso-hub render-sessions out.png [--compact]` draws the sessions window
+// into a PNG, with the sessions of this Mac: the cloud's would need the
+// keychain.
+if command == "render-sessions", CommandLine.arguments.count > 2 {
+  MainActor.assumeIsolated {
+    let sessions = ClaudeSessions(cloud: false)
+    sessions.refresh()
+    let compact = CommandLine.arguments.contains("--compact")
+    let renderer = ImageRenderer(content: SessionsView(sessions: sessions.sessions, now: Date(), compact: compact)
+      .background(Color(nsColor: .windowBackgroundColor)))
+    renderer.scale = 2
+    if let image = renderer.nsImage, let tiff = image.tiffRepresentation,
+       let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+      try? png.write(to: URL(fileURLWithPath: CommandLine.arguments[2]))
+      print("wrote \(CommandLine.arguments[2])")
+    }
+  }
+  exit(0)
+}
+
 // `nesso-hub meet-react 🦄 [--dry]` walks through sending a reaction step by
 // step, printing each one; with --dry it stops before the final click, so
 // nothing reaches the call.
@@ -130,6 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var hub: Hub!
   private var menu: StatusMenu!
   private var reactionsWindow: ReactionsWindow!
+  private var sessionsWindow: SessionsWindow!
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     link = Link()
@@ -141,10 +162,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       config.save()
       meet.reactions = reactions
     }
-    menu = StatusMenu(link: link, hub: hub, claude: claude) { [weak self] in self?.reactionsWindow.show() }
+    sessionsWindow = SessionsWindow(claude: claude, compact: config.claude.compact, onVisibilityChange: { visible in
+      guard config.claude.window != visible else { return }
+      config.claude.window = visible
+      config.save()
+    }, onCompactChange: { compact in
+      config.claude.compact = compact
+      config.save()
+    })
+    menu = StatusMenu(link: link, hub: hub, claude: claude, sessionsWindow: sessionsWindow) { [weak self] in
+      self?.reactionsWindow.show()
+    }
     link.onSettled = { [weak self] in
       log("hub", "running")
       self?.hub.start()
+      if config.claude.window { self?.sessionsWindow.show() }
     }
     // A menu bar app is never frontmost on its own, and macOS shows the
     // permission prompts of an app that is not frontmost behind everything.

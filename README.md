@@ -43,6 +43,14 @@ there is no browser extension to install.
   not: one LED per session, most urgent first. Orange and blinking: it waits
   for you. Green: it finished and you have not looked at it yet. Blue and
   breathing: it is working. Dim white: it is open, with nothing new.
+- **Sessions window** (menu bar → Floating Sessions Window): the Claude
+  page's sessions in a small window that floats over every other one, in
+  every Space and over full-screen apps, like a picture in picture. It helps
+  during a call, when the Nesso shows Meet. Click a session to open it, or a
+  counter to open the most urgent session it counts. It never takes the
+  focus, it grows and shrinks with the list, and it stays where you drag it.
+  The chevron at the end of the counters folds it down to the counters
+  alone, and back.
 - **Clock page** the rest of the time.
 - **Reactions window** (menu bar → Choose Reactions…): every emoji in Meet's
   picker, in Meet's groups, searchable in English and Italian and by
@@ -120,7 +128,7 @@ Restart the app after editing it by hand.
   "automations": [
     { "title": "Weekly Sync", "code": "abc-defg-hij", "joins": "Jane Doe", "react": "🎉" }
   ],
-  "claude": { "enabled": true, "brightness": 4, "cloud": true }
+  "claude": { "enabled": true, "brightness": 4, "cloud": true, "window": false, "compact": false }
 }
 ```
 
@@ -132,7 +140,9 @@ Restart the app after editing it by hand.
   names, ignoring case and accents.
 - `claude`: `enabled` off hides the Claude page and leaves the LEDs dark;
   `brightness` is the LEDs', 1 to 31; `cloud` off leaves out the sessions
-  that do not run on this Mac, and with them the keychain.
+  that do not run on this Mac, and with them the keychain; `window` is
+  whether the sessions window is open, kept from the menu bar; `compact`
+  whether it shows the counters alone, kept from its chevron.
 
 ### How Nesso Hub sees the Claude sessions
 
@@ -237,6 +247,8 @@ open -n -W "/Applications/Nesso Hub.app" --stdout out.txt --args meet-probe
 - `meet-watch "Name" [seconds]`: looks for someone in the People panel like an
   automation does, without reacting.
 - `render-reactions out.png [query]`: draws the Reactions window to a PNG.
+- `render-sessions out.png [--compact]`: draws the sessions window to a PNG,
+  with the sessions of this Mac only, so that it needs no keychain.
 - `claude-probe [seconds]`: the Claude sessions as the Claude page sees them,
   and what the cloud API lists, printed each time they change. Run through
   the app, it uses the app's keychain permission; run straight from the

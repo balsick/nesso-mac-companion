@@ -12,10 +12,13 @@ final class ClaudeContext: HubContext, HubIndicator {
   let name = "claude"
   let priority = 50
   var onChange: (() -> Void)?
+  /// Fires after every refresh, for the sessions window.
+  var onRefresh: (() -> Void)?
 
   private let sessions: ClaudeSessions
   private let config: Config.Claude
-  private var list: [ClaudeSessions.Session] = []
+  /// Most urgent first.
+  private(set) var list: [ClaudeSessions.Session] = []
   private var pageIndex = 0
   private var now = Date()
 
@@ -44,6 +47,7 @@ final class ClaudeContext: HubContext, HubIndicator {
     guard config.enabled else { return }
     sessions.refresh()
     list = sessions.sessions
+    onRefresh?()
   }
 
   func page(icons: IconStore) -> Page {
@@ -102,7 +106,7 @@ final class ClaudeContext: HubContext, HubIndicator {
 
   // MARK: Pieces
 
-  private func open(_ session: ClaudeSessions.Session) {
+  func open(_ session: ClaudeSessions.Session) {
     log("claude", "opening \(session.name)")
     sessions.open(session)
   }

@@ -31,6 +31,11 @@ struct Config: Codable {
     /// Also list the sessions that run in the cloud, with Claude Code's
     /// token from the keychain.
     var cloud = true
+    /// The floating sessions window, which the menu bar turns on and off.
+    var window = false
+    /// That window with the counters alone, which its chevron turns on and
+    /// off.
+    var compact = false
 
     init() {}
 
@@ -40,6 +45,8 @@ struct Config: Codable {
       enabled = try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled
       brightness = try values.decodeIfPresent(Int.self, forKey: .brightness) ?? defaults.brightness
       cloud = try values.decodeIfPresent(Bool.self, forKey: .cloud) ?? defaults.cloud
+      window = try values.decodeIfPresent(Bool.self, forKey: .window) ?? defaults.window
+      compact = try values.decodeIfPresent(Bool.self, forKey: .compact) ?? defaults.compact
     }
   }
 
