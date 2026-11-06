@@ -186,11 +186,14 @@ CLAUDE_CONFIG_DIR=~/.claude-other claude auth login
 ```
 
 and choose that organisation in the browser. Nesso Hub uses every Claude
-Code login in the keychain and merges what they list; it finds a new one
-within ten minutes. It matches
-each login to its folder among the ones in your home folder: Claude Code
-names a login's keychain item after the SHA-256 of its folder's path. Logging
-in again in the same folder is picked up the same way.
+Code login in the keychain whose folder is right in your home folder, and
+merges what they list; it finds a new one within ten minutes. It matches
+each login to its folder: Claude Code names a login's keychain item after
+the SHA-256 of its folder's path. Logging in again in the same folder is
+picked up the same way. A login whose folder is elsewhere is left out, and
+named in the log: it is most likely another app's, one that embeds Claude
+Code with a folder of its own, as Arduino App Lab does in Application
+Support.
 
 A token lasts a few hours, and only Claude Code renews it, when it runs with
 that login's folder: the Claude app gives its own sessions a token of its
@@ -201,9 +204,8 @@ connectors, Claude Code checks the token and renews it, under its own lock,
 without a model call. It renews only in a token's last five minutes, so
 asking earlier would start every MCP server for nothing. The log says
 whether it did. Nesso Hub never renews a token itself,
-which would spend the refresh token behind Claude Code's back. A login whose
-folder is not right in your home folder cannot be renewed this way, and one
-that lapsed more than a day ago counts as abandoned and only goes to the log.
+which would spend the refresh token behind Claude Code's back. A login that
+lapsed more than a day ago counts as abandoned and only goes to the log.
 
 Tapping a session of the Claude app opens it through the app's
 `claude://code/continue?session=…` link, and a cloud one through

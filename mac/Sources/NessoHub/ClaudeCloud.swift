@@ -12,8 +12,9 @@ import Security
 /// A token answers for the organisation its login chose, so a Claude app
 /// profile signed in to another one needs a login of its own: Claude Code run
 /// with another CLAUDE_CONFIG_DIR keeps its login in a keychain item of its
-/// own, next to the default one. Every "Claude Code-credentials…" item is
-/// used, and the lists are merged.
+/// own, next to the default one. Every "Claude Code-credentials…" item of
+/// a folder right in the home folder is used, and the lists are merged; the
+/// others belong to apps that embed Claude Code (see `findLogins`).
 ///
 /// A token lasts a few hours, and only Claude Code renews it, when it runs
 /// with that login's folder: the Claude app gives its sessions a token of its
@@ -77,6 +78,8 @@ final class ClaudeCloud {
   // Only touched on `queue`.
   private var logins: [Login] = []
   private var lastLoginsRead = Date.distantPast
+  /// The items of other apps, left out.
+  private var others: [String] = []
   private var accounts: [String: Account] = [:]
   /// The recent sessions left out, each logged once.
   private var skipped = Set<String>()
@@ -87,8 +90,8 @@ final class ClaudeCloud {
     var service: String
     /// Nil for the default folder, ~/.claude.
     var folder: String?
-    /// False when no folder in the home folder goes with the item, so
-    /// Claude Code cannot be asked to renew it.
+    /// False when Nesso Hub cannot find Claude Code to ask it to renew the
+    /// token.
     var renewable: Bool
     /// When the item last changed: a login done again, or a renewal.
     var modified: Date?
@@ -157,16 +160,18 @@ final class ClaudeCloud {
   private func poll() -> ([Remote]?, [Problem]) {
     if Date().timeIntervalSince(lastLoginsRead) >= Self.keychainInterval {
       lastLoginsRead = Date()
-      let found = Self.findLogins()
+      let (found, others) = Self.findLogins()
       // A changed item holds another token, maybe of another organisation.
       for login in found where logins.first(where: { $0.service == login.service })?.modified != login.modified {
         accounts[login.service] = nil
       }
-      if found.map(\.service) != logins.map(\.service) {
-        let names = found.map { "\($0.service) (\($0.folder ?? ($0.renewable ? "~/.claude" : "folder unknown")))" }
-        DispatchQueue.main.async { log("cloud", "Claude Code logins: \(names.joined(separator: ", "))") }
+      if found.map(\.service) != logins.map(\.service) || others != self.others {
+        let names = found.map { "\($0.service) (\($0.folder ?? "~/.claude"))" }
+        let left = others.isEmpty ? "" : "; left out, their folder not in the home folder: \(others.joined(separator: ", "))"
+        DispatchQueue.main.async { log("cloud", "Claude Code logins: \(names.joined(separator: ", "))\(left)") }
       }
       logins = found
+      self.others = others
     }
     guard !logins.isEmpty else { return (nil, [Problem(message: "Claude Code is not signed in on this Mac")]) }
 
@@ -262,7 +267,13 @@ final class ClaudeCloud {
   /// login's item is "Claude Code-credentials"; another folder's adds "-" and
   /// the first eight hex digits of the SHA-256 of its path, so the folders
   /// that go with them are found among those in the home folder.
-  private static func findLogins() -> [Login] {
+  ///
+  /// An item whose folder is not there is left out, and only its name is
+  /// returned: it is most likely another app's, one that embeds Claude Code
+  /// with a folder of its own, as Arduino App Lab does in Application
+  /// Support. Its token is not Nesso Hub's to read, and Claude Code could not
+  /// be asked to renew it anyway.
+  private static func findLogins() -> (logins: [Login], others: [String]) {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecMatchLimit as String: kSecMatchLimitAll,
@@ -270,7 +281,7 @@ final class ClaudeCloud {
     ]
     var items: CFTypeRef?
     guard SecItemCopyMatching(query as CFDictionary, &items) == errSecSuccess,
-          let list = items as? [[String: Any]] else { return [] }
+          let list = items as? [[String: Any]] else { return ([], []) }
     var services: [String: Date?] = [:]
     for item in list {
       guard let service = item[kSecAttrService as String] as? String, service.hasPrefix(keychainService) else { continue }
@@ -287,14 +298,17 @@ final class ClaudeCloud {
       folders["\(keychainService)-" + digest.map { String(format: "%02x", $0) }.joined().prefix(8)] = path
     }
 
-    return services.keys.sorted().map { service in
-      let modified = services[service] ?? nil
-      if service == keychainService {
-        return Login(service: service, folder: nil, renewable: cli != nil, modified: modified)
-      }
+    var logins: [Login] = []
+    var others: [String] = []
+    for service in services.keys.sorted() {
       let folder = folders[service]
-      return Login(service: service, folder: folder, renewable: folder != nil && cli != nil, modified: modified)
+      guard service == keychainService || folder != nil else {
+        others.append(service)
+        continue
+      }
+      logins.append(Login(service: service, folder: folder, renewable: cli != nil, modified: services[service] ?? nil))
     }
+    return (logins, others)
   }
 
   /// Runs `claude mcp list` for a login, which renews its token if it is
