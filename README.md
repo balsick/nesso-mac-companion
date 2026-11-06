@@ -49,8 +49,9 @@ there is no browser extension to install.
   during a call, when the Nesso shows Meet. Click a session to open it, or a
   counter to open the most urgent session it counts. It never takes the
   focus, it grows and shrinks with the list, and it stays where you drag it.
-  The chevron at the end of the counters folds it down to the counters
-  alone, and back.
+  The chevron at the end of the counters folds it down to a pill with the
+  counters alone and no title bar. Drag the pill by its grip, unfold it with
+  the chevron or a double click on the grip, and close it with a right click.
 - **Clock page** the rest of the time.
 - **Reactions window** (menu bar → Choose Reactions…): every emoji in Meet's
   picker, in Meet's groups, searchable in English and Italian and by

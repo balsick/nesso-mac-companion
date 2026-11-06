@@ -57,8 +57,11 @@ if command == "render-sessions", CommandLine.arguments.count > 2 {
     let sessions = ClaudeSessions(cloud: false)
     sessions.refresh()
     let compact = CommandLine.arguments.contains("--compact")
-    let renderer = ImageRenderer(content: SessionsView(sessions: sessions.sessions, now: Date(), compact: compact)
-      .background(Color(nsColor: .windowBackgroundColor)))
+    // The pill on a grey backdrop, as it floats over other windows.
+    let renderer = ImageRenderer(content: SessionsView(sessions: sessions.sessions, now: Date(), compact: compact,
+                                                       inWindow: false)
+      .padding(compact ? 12 : 0)
+      .background(compact ? Color(white: 0.8) : Color(nsColor: .windowBackgroundColor)))
     renderer.scale = 2
     if let image = renderer.nsImage, let tiff = image.tiffRepresentation,
        let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
