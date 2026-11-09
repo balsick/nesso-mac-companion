@@ -66,7 +66,9 @@ and the `Arduino_Nesso_N1` and `ArduinoJson` (7.x) libraries.
 
 The Modulino Pixels is optional: plug it into the Qwiic connector, before or
 after boot, and the Nesso finds it at its default address. No library is
-needed for it.
+needed for it. The firmware lights it from the left for a Modulino below the
+Nesso with its green power LED on the right; for one screwed on the other
+way round, flip `PIXELS_REVERSE` in `firmware/NessoHub/config.h`.
 
 ```sh
 arduino-cli core install esp32:esp32
@@ -83,8 +85,7 @@ arduino-cli compile -b esp32:esp32:arduino_nesso_n1 --build-property compiler.cp
 ```
 
 The screen and the touch turn half way round, and the Modulino Pixels LEDs
-keep their left-to-right order. If the Modulino is also screwed on rotated
-180°, set `PIXELS_REVERSE` to 0.
+keep their left-to-right order.
 
 Over USB it also has a serial console (`status`, `screen`, `tap <x> <y>`,
 `press <key> [ms]`, or a JSON message as if the Mac had sent it). `tools/` talks to it with nothing but

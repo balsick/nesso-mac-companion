@@ -88,12 +88,13 @@
 #define PIXELS_BLINK_MS 1000
 // How often to look for a module that was not there.
 #define PIXELS_PROBE_MS 3000
-// Sends the LEDs in reverse, so the first one in a "pixels" message is still
-// the leftmost for a module that sits the other way round. Turning the Nesso
-// upside down turns the Modulino with it, hence the default. Set it to 0 if
-// the Modulino is also screwed on rotated 180°, which undoes the turn.
+// The module's first LED is the one next to its green power LED. The default
+// is for a Modulino below the Nesso with that LED on the right: the order is
+// reversed, so the first LED of a "pixels" message is on the left. Upside
+// down, the module turns with the Nesso and that end comes round to the left.
+// Flip this for a Modulino screwed on the other way round.
 #ifndef PIXELS_REVERSE
-#define PIXELS_REVERSE MOUNT_UPSIDE_DOWN
+#define PIXELS_REVERSE (!MOUNT_UPSIDE_DOWN)
 #endif
 
 // --- Colours (RGB565) -----------------------------------------------------
