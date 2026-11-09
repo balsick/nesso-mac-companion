@@ -232,7 +232,9 @@ builds its list, and closes it again. The list stays in the page out of
 sight, Meet keeps it up to date, and its search still filters it: the app
 types the person's name into it and checks the participants each second.
 People who were invited but have not joined are listed in the same panel and
-are ignored.
+are ignored. Right after you join, Meet takes a moment to draw the People
+button, so the app keeps looking for it for 30 seconds before it gives up on
+that call.
 
 The Meet REST API would be the clean way to do this, but it needs a Google
 Cloud project, and the hidden project behind Apps Script does not have the

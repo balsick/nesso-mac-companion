@@ -43,6 +43,12 @@ final class MeetContext: HubContext {
   private let automations: [Config.Automation]
   /// The automation waiting for its person in the current call.
   private var armed: Config.Automation?
+  /// When `armed` was armed.
+  private var armedAt = Date.distantPast
+  /// Right after joining, Meet takes a moment to draw the People button and
+  /// the panel behind it. How long an automation keeps looking for them
+  /// before it gives up on the call.
+  private static let watchPatience: TimeInterval = 30
   /// Automations finished for a call, sent or given up: "code|person|day".
   private var finished = Set<String>()
   /// The last `State.watch`, to log its changes.
@@ -189,6 +195,7 @@ final class MeetContext: HubContext {
         $0.matches(code: code, title: state.title) && !finished.contains(key(rule: $0, code: code))
       }) {
         armed = rule
+        armedAt = Date()
         log("auto", "\(state.title ?? code): watching the People panel for \(rule.joins)")
       }
       return
@@ -205,6 +212,9 @@ final class MeetContext: HubContext {
         self?.unwatch()
       }
     } else if state.watch == "no button" || state.watch == "no panel" {
+      // The script looks again on every poll, and clicks People once it is
+      // there; only give up once Meet has had its time.
+      guard Date().timeIntervalSince(armedAt) > Self.watchPatience else { return }
       finish(rule, code: code, "cannot watch for \(rule.joins): \(state.watch ?? "")")
       unwatch()
     }
