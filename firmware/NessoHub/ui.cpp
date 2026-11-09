@@ -31,8 +31,16 @@ struct Tile {
   uint16_t bg = COL_PANEL;
   uint16_t fg = COL_TEXT;
   Font font = FONT_M;
-  // Laid out when the page arrives, so hit-testing matches what was drawn.
+  uint8_t row = 0, col = 0;
+  // Laid out when the page arrives or the screen turns, so hit-testing
+  // matches what was drawn.
   int16_t x = 0, y = 0, w = 0, h = 0;
+};
+
+struct Row {
+  int16_t h = 0;
+  // How many tiles the Mac put in the row, which sets their width.
+  uint8_t cols = 0;
 };
 
 // Hold-to-confirm on a key: while it is held a full-screen loader fills up,
@@ -49,6 +57,8 @@ struct Page {
   String title;
   String sub;
   uint16_t accent = COL_TEAL;
+  uint8_t rowCount = 0;
+  Row rows[MAX_ROWS];
   uint8_t tileCount = 0;
   Tile tiles[MAX_TILES];
   Hold holds[2];
@@ -175,8 +185,28 @@ static void drawTile(LovyanGFX* g, const Tile& tile, bool flash) {
   }
 }
 
+// Places the tiles for the screen as it is turned now. Tiles share their
+// row's width.
+static void layout() {
+  int16_t rowY[MAX_ROWS];
+  int16_t y = HEADER_H + (page.sub.length() ? SUB_H : 0) + GAP;
+  for (uint8_t r = 0; r < page.rowCount; r++) {
+    rowY[r] = y;
+    y += page.rows[r].h + GAP;
+  }
+  for (uint8_t i = 0; i < page.tileCount; i++) {
+    Tile& tile = page.tiles[i];
+    const Row& row = page.rows[tile.row];
+    tile.w = (hw::width() - 2 * MARGIN - (row.cols - 1) * GAP) / row.cols;
+    tile.h = row.h;
+    tile.x = MARGIN + tile.col * (tile.w + GAP);
+    tile.y = rowY[tile.row];
+  }
+}
+
 static void drawHeader(LovyanGFX* g) {
-  g->fillRect(0, 0, SCREEN_W, HEADER_H, COL_PANEL_ALT);
+  const int16_t width = hw::width();
+  g->fillRect(0, 0, width, HEADER_H, COL_PANEL_ALT);
   g->setFont(&fonts::FreeSansBold9pt7b);
   g->setTextSize(1);
   g->setTextColor(page.accent);
@@ -189,7 +219,7 @@ static void drawHeader(LovyanGFX* g) {
   g->setFont(&fonts::Font0);
   g->setTextColor(colour);
   g->setTextDatum(textdatum_t::middle_right);
-  g->drawString(String(level) + "%", SCREEN_W - 4, HEADER_H / 2);
+  g->drawString(String(level) + "%", width - 4, HEADER_H / 2);
 
   if (page.sub.length()) {
     g->setFont(&fonts::Font0);
@@ -209,12 +239,13 @@ static void render() {
   flush();
 }
 
-static void centeredText(LovyanGFX* g, const String& text, int16_t y, const lgfx::IFont* font, uint16_t colour) {
+static void centeredText(LovyanGFX* g, const String& text, int16_t x, int16_t y, const lgfx::IFont* font,
+                         uint16_t colour) {
   g->setFont(font);
   g->setTextSize(1);
   g->setTextColor(colour);
   g->setTextDatum(textdatum_t::middle_center);
-  g->drawString(text, SCREEN_W / 2, y);
+  g->drawString(text, x, y);
 }
 
 // A quarter of the colour's brightness, for the loader's background.
@@ -228,7 +259,13 @@ static void drawHold(const Hold& hold, float progress, HoldFrame frame) {
   uint16_t bg = dim(hold.bg);
   g->fillScreen(bg);
 
-  const int16_t cx = SCREEN_W / 2, cy = 96, outer = 54, inner = 44;
+  // Upright the ring sits above the text; on its side, to the left of it.
+  const int16_t width = hw::width(), height = hw::height();
+  const bool wide = width > height;
+  const int16_t outer = wide ? 50 : 54, inner = wide ? 41 : 44;
+  const int16_t cx = wide ? 62 : width / 2, cy = wide ? height / 2 : 96;
+  const int16_t textX = wide ? (cx + outer + width) / 2 : width / 2;
+  const int16_t labelY = wide ? cy - 10 : 174, hintY = wide ? cy + 14 : 200;
   g->fillArc(cx, cy, outer, inner, 0, 360, COL_PANEL_ALT);
   // LovyanGFX measures angles clockwise from 3 o'clock; start at 12.
   float end = 270 + 360 * constrain(progress, 0.0f, 1.0f);
@@ -238,42 +275,66 @@ static void drawHold(const Hold& hold, float progress, HoldFrame frame) {
   Icon* icon = findIcon(hold.icon);
   if (icon) drawIcon(g, *icon, cx - icon->w / 2, cy - icon->h / 2, bg, COL_TEXT);
 
-  centeredText(g, frame == HOLD_DONE ? hold.done : hold.label, 174, &fonts::FreeSansBold9pt7b, COL_TEXT);
-  if (frame == HOLD_FILLING) centeredText(g, "release to cancel", 200, &fonts::Font2, COL_MUTED);
+  centeredText(g, frame == HOLD_DONE ? hold.done : hold.label, textX, labelY, &fonts::FreeSansBold9pt7b, COL_TEXT);
+  if (frame == HOLD_FILLING) centeredText(g, "release to cancel", textX, hintY, &fonts::Font2, COL_MUTED);
   flush();
 }
 
 // --- Public --------------------------------------------------------------
 
+static void createCanvas() {
+  canvas.deleteSprite();
+  buffered = canvas.createSprite(hw::width(), hw::height());
+}
+
 void begin() {
   canvas.setColorDepth(16);
-  buffered = canvas.createSprite(SCREEN_W, SCREEN_H);
+  createCanvas();
   Serial.printf("[ui] framebuffer %s\n", buffered ? "enabled" : "unavailable, drawing direct");
 }
 
 void showSplash() {
   LovyanGFX* g = target();
+  const int16_t cx = hw::width() / 2, cy = hw::height() / 2;
   g->fillScreen(COL_BG);
-  centeredText(g, "Nesso Hub", 104, &fonts::FreeSansBold12pt7b, COL_TEAL);
-  centeredText(g, HUB_FIRMWARE_VERSION, 132, &fonts::Font2, COL_MUTED);
+  centeredText(g, "Nesso Hub", cx, cy - 16, &fonts::FreeSansBold12pt7b, COL_TEAL);
+  centeredText(g, HUB_FIRMWARE_VERSION, cx, cy + 12, &fonts::Font2, COL_MUTED);
   flush();
 }
 
 void showWaiting() {
   pageValid = false;
   LovyanGFX* g = target();
+  const int16_t cx = hw::width() / 2, cy = hw::height() / 2;
   g->fillScreen(COL_BG);
-  centeredText(g, "Nesso Hub", 84, &fonts::FreeSansBold12pt7b, COL_TEAL);
-  centeredText(g, "waiting for", 120, &fonts::Font2, COL_TEXT);
-  centeredText(g, "the Mac", 138, &fonts::Font2, COL_TEXT);
-  centeredText(g, "BLE: " BLE_NAME, SCREEN_H - 14, &fonts::Font0, COL_MUTED);
+  centeredText(g, "Nesso Hub", cx, cy - 36, &fonts::FreeSansBold12pt7b, COL_TEAL);
+  centeredText(g, "waiting for", cx, cy, &fonts::Font2, COL_TEXT);
+  centeredText(g, "the Mac", cx, cy + 18, &fonts::Font2, COL_TEXT);
+  centeredText(g, "BLE: " BLE_NAME, cx, hw::height() - 14, &fonts::Font0, COL_MUTED);
   flush();
+}
+
+void rotated() {
+  // Same number of pixels either way, so the new buffer fits where the old
+  // one was.
+  createCanvas();
+  if (!buffered) Serial.println("[ui] framebuffer lost, drawing direct");
+  layout();
+  if (!pageValid) {
+    showWaiting();
+  } else if (doneKey >= 0) {
+    drawHold(page.holds[doneKey], 1, HOLD_DONE);
+  } else {
+    // A loader on screen redraws itself on its next frame.
+    render();
+  }
 }
 
 void applyPage(JsonObjectConst json, JsonArray missing) {
   page.title = json["title"] | "";
   page.sub = json["sub"] | "";
   page.accent = parseColor(json["accent"], COL_TEAL);
+  page.rowCount = 0;
   page.tileCount = 0;
 
   for (Hold& hold : page.holds) hold.on = false;
@@ -290,17 +351,14 @@ void applyPage(JsonObjectConst json, JsonArray missing) {
   }
   for (uint8_t k = 1; k <= 2; k++) hw::setHold(k, page.holds[k - 1].on);
 
-  int16_t y = HEADER_H + (page.sub.length() ? SUB_H : 0) + GAP;
-  for (JsonObjectConst row : json["rows"].as<JsonArrayConst>()) {
-    int16_t h = row["h"] | 44;
-    JsonArrayConst tiles = row["tiles"].as<JsonArrayConst>();
-    int16_t count = tiles.size();
-    if (!count) {
-      y += h + GAP;
-      continue;
-    }
-    int16_t w = (SCREEN_W - 2 * MARGIN - (count - 1) * GAP) / count;
-    int16_t x = MARGIN;
+  for (JsonObjectConst spec : json["rows"].as<JsonArrayConst>()) {
+    // Rows past MAX_ROWS would be below the screen anyway.
+    if (page.rowCount >= MAX_ROWS) break;
+    Row& row = page.rows[page.rowCount];
+    row.h = spec["h"] | 44;
+    JsonArrayConst tiles = spec["tiles"].as<JsonArrayConst>();
+    row.cols = tiles.size();
+    uint8_t col = 0;
     for (JsonObjectConst t : tiles) {
       if (page.tileCount >= MAX_TILES) break;
       Tile& tile = page.tiles[page.tileCount++];
@@ -310,11 +368,8 @@ void applyPage(JsonObjectConst json, JsonArray missing) {
       tile.bg = parseColor(t["bg"], COL_PANEL);
       tile.fg = parseColor(t["fg"], COL_TEXT);
       tile.font = parseFont(t["font"]);
-      tile.x = x;
-      tile.y = y;
-      tile.w = w;
-      tile.h = h;
-      x += w + GAP;
+      tile.row = page.rowCount;
+      tile.col = col++;
 
       if (tile.icon.length() && !findIcon(tile.icon)) {
         bool listed = false;
@@ -322,8 +377,9 @@ void applyPage(JsonObjectConst json, JsonArray missing) {
         if (!listed) missing.add(tile.icon);
       }
     }
-    y += h + GAP;
+    page.rowCount++;
   }
+  layout();
 
   pageValid = true;
   if (flashed >= page.tileCount) flashed = -1;
@@ -482,7 +538,7 @@ void dumpScreen() {
 
   const uint8_t* data = (const uint8_t*)canvas.getBuffer();
   const uint32_t length = canvas.bufferLength();
-  Serial.printf("[screen] begin %d %d rgb565 %u\n", SCREEN_W, SCREEN_H, length);
+  Serial.printf("[screen] begin %d %d rgb565 %u\n", canvas.width(), canvas.height(), length);
 
   char line[89];
   uint8_t col = 0;

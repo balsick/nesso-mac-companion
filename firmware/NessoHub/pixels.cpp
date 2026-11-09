@@ -15,6 +15,7 @@ struct Led {
 
 static Led leds[PIXELS_COUNT];
 static uint8_t brightness = PIXELS_DEFAULT_BRIGHTNESS;
+static bool reversed = PIXELS_REVERSE;
 static bool found = false;
 static uint32_t lastProbeMs = 0;
 static uint32_t lastFrameMs = 0;
@@ -50,7 +51,7 @@ static void show(uint32_t now) {
   uint8_t frame[PIXELS_COUNT * 4];
   for (uint8_t i = 0; i < PIXELS_COUNT; i++) {
     float k = level(leds[i].fx, now);
-    uint8_t* out = frame + (PIXELS_REVERSE ? PIXELS_COUNT - 1 - i : i) * 4;
+    uint8_t* out = frame + (reversed ? PIXELS_COUNT - 1 - i : i) * 4;
     out[0] = 0xE0 | (brightness & 0x1F);
     out[1] = (uint8_t)(leds[i].b * k);
     out[2] = (uint8_t)(leds[i].g * k);
@@ -101,6 +102,15 @@ void apply(JsonObjectConst msg) {
 
 void clear() {
   for (Led& led : leds) led = Led();
+  if (found) show(millis());
+}
+
+void setRotation(uint8_t rotation) {
+  // With the USB-C end on the right, the end of the bar that is on the left
+  // at rotation 0 goes to the bottom; upside down, it goes to the right.
+  // Either way the first LED has to move to the other end.
+  bool turned = rotation == 1 || rotation == 2;
+  reversed = PIXELS_REVERSE ? !turned : turned;
   if (found) show(millis());
 }
 

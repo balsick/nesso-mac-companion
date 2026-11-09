@@ -20,8 +20,8 @@ static void sendHello() {
   doc["t"] = "hello";
   doc["fw"] = HUB_FIRMWARE_VERSION;
   doc["proto"] = HUB_PROTOCOL_VERSION;
-  doc["w"] = SCREEN_W;
-  doc["h"] = SCREEN_H;
+  doc["w"] = hw::width();
+  doc["h"] = hw::height();
   doc["px"] = pixels::present() ? PIXELS_COUNT : 0;
   String out;
   serializeJson(doc, out);
@@ -96,6 +96,20 @@ static void pollTaps() {
   if (id.length()) sendEvent("tap", "id", id);
 }
 
+// The screen turned: redraw, and ask the Mac for a page that fits.
+static void onRotated() {
+  ui::rotated();
+  pixels::setRotation(hw::rotation());
+  JsonDocument doc;
+  doc["t"] = "screen";
+  doc["w"] = hw::width();
+  doc["h"] = hw::height();
+  String out;
+  serializeJson(doc, out);
+  Serial.printf("[tx] %s\n", out.c_str());
+  ble::send(out);
+}
+
 // --- Serial console --------------------------------------------------------
 
 static void runCommand(String line) {
@@ -116,13 +130,32 @@ static void runCommand(String line) {
   } else if (verb == "press") {
     int split = rest.indexOf(' ');
     hw::injectPress(rest.substring(0, split).toInt(), split < 0 ? 100 : rest.substring(split + 1).toInt());
+  } else if (verb == "rotate") {
+    // A number locks the screen there; "auto" hands it back to the
+    // accelerometer.
+    if (rest == "auto") {
+      hw::setAutoRotate(true);
+    } else if (rest.length()) {
+      hw::setAutoRotate(false);
+      hw::rotate(rest.toInt());
+      onRotated();
+    }
+    Serial.printf("[rotate] %d, %s\n", hw::rotation(), hw::autoRotate() ? "auto" : "locked");
+  } else if (verb == "imu") {
+    float x, y, z;
+    int8_t wants;
+    if (hw::readImu(x, y, z, wants)) {
+      Serial.printf("[imu] %.2f %.2f %.2f g, up calls for rotation %d\n", x, y, z, wants);
+    } else {
+      Serial.println("[imu] no reading");
+    }
   } else if (verb == "status") {
-    Serial.printf("[status] fw %s, ble %s, page %s, pixels %s, battery %d%%%s, heap %u\n", HUB_FIRMWARE_VERSION,
-                  ble::connected() ? "connected" : "advertising", ui::hasPage() ? "yes" : "no",
-                  pixels::present() ? "yes" : "no", hw::batteryLevel(), hw::charging() ? " (charging)" : "",
-                  ESP.getFreeHeap());
+    Serial.printf("[status] fw %s, ble %s, page %s, pixels %s, rotation %d%s, battery %d%%%s, heap %u\n",
+                  HUB_FIRMWARE_VERSION, ble::connected() ? "connected" : "advertising", ui::hasPage() ? "yes" : "no",
+                  pixels::present() ? "yes" : "no", hw::rotation(), hw::autoRotate() ? " (auto)" : "",
+                  hw::batteryLevel(), hw::charging() ? " (charging)" : "", ESP.getFreeHeap());
   } else if (verb == "help") {
-    Serial.println("commands: status | screen | tap <x> <y> | press <key> [ms] | help");
+    Serial.println("commands: status | screen | tap <x> <y> | press <key> [ms] | rotate <0-3|auto> | imu | help");
     Serial.println("          or a JSON message, e.g. {\"t\":\"page\",...}, as if the Mac sent it");
   } else {
     Serial.printf("unknown command '%s', try 'help'\n", verb.c_str());
@@ -155,6 +188,7 @@ void setup() {
   Serial.println("\n[hub] Nesso Hub " HUB_FIRMWARE_VERSION);
 
   hw::begin();
+  pixels::setRotation(hw::rotation());
   pixels::begin();
   ui::begin();
   ui::showSplash();
@@ -168,6 +202,7 @@ void loop() {
   hw::pollTouch();
   hw::pollKeys();
   hw::pollBattery();
+  if (hw::pollRotation()) onRotated();
   pollTaps();
   ui::tick();
   pixels::tick();

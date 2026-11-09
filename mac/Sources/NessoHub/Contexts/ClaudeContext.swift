@@ -21,9 +21,12 @@ final class ClaudeContext: HubContext, HubIndicator {
   private(set) var list: [ClaudeSessions.Session] = []
   private var pageIndex = 0
   private var now = Date()
+  /// The one the last page was laid out for, so KEY2 pages the same way.
+  private var screen = Screen.upright
 
-  /// What fits under the counters.
-  private static let perPage = 5
+  /// What fits under the counters: five rows upright, two rows of two on
+  /// its side.
+  private var perPage: Int { screen.isWide ? 4 : 5 }
 
   init(config: Config.Claude) {
     self.config = config
@@ -50,8 +53,9 @@ final class ClaudeContext: HubContext, HubIndicator {
     onRefresh?()
   }
 
-  func page(icons: IconStore) -> Page {
-    let pages = max(1, (list.count + Self.perPage - 1) / Self.perPage)
+  func page(icons: IconStore, screen: Screen) -> Page {
+    self.screen = screen
+    let pages = max(1, (list.count + perPage - 1) / perPage)
     pageIndex = min(pageIndex, pages - 1)
 
     var rows = [Row(h: 44, tiles: [
@@ -59,10 +63,17 @@ final class ClaudeContext: HubContext, HubIndicator {
       counter(.done, symbol: "checkmark", icons: icons),
       counter(.working, symbol: "ellipsis", icons: icons),
     ])]
-    for session in list.dropFirst(pageIndex * Self.perPage).prefix(Self.perPage) {
-      rows.append(Row(h: 26, tiles: [Tile(id: "s:\(session.key)", label: short(session.name),
-                                          bg: Self.screenColour(session.state),
-                                          fg: session.state == .idle ? Palette.muted : Palette.text, font: "s")]))
+    let shown = Array(list.dropFirst(pageIndex * perPage).prefix(perPage))
+    if screen.isWide {
+      // An empty black tile keeps a lone session in the last row at half width.
+      for start in stride(from: 0, to: shown.count, by: 2) {
+        let pair = shown[start..<min(start + 2, shown.count)].map { tile($0, maxLength: 16) }
+        rows.append(Row(h: 22, tiles: pair.count == 2 ? pair : pair + [Tile(bg: "#000000")]))
+      }
+    } else {
+      for session in shown {
+        rows.append(Row(h: 26, tiles: [tile(session, maxLength: 18)]))
+      }
     }
 
     let time = now.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
@@ -84,8 +95,8 @@ final class ClaudeContext: HubContext, HubIndicator {
     guard action == "click" else { return }
     if key == 1, let session = list.first {
       open(session)
-    } else if key == 2, list.count > Self.perPage {
-      pageIndex = (pageIndex + 1) % ((list.count + Self.perPage - 1) / Self.perPage)
+    } else if key == 2, list.count > perPage {
+      pageIndex = (pageIndex + 1) % ((list.count + perPage - 1) / perPage)
       onChange?()
     }
   }
@@ -131,10 +142,15 @@ final class ClaudeContext: HubContext, HubIndicator {
     }
   }
 
+  private func tile(_ session: ClaudeSessions.Session, maxLength: Int) -> Tile {
+    Tile(id: "s:\(session.key)", label: short(session.name, maxLength: maxLength),
+         bg: Self.screenColour(session.state), fg: session.state == .idle ? Palette.muted : Palette.text, font: "s")
+  }
+
   /// A 127px tile holds about eighteen characters of the small font, fewer
-  /// in capitals.
-  private func short(_ name: String) -> String {
+  /// in capitals; the 114px ones on its side about sixteen.
+  private func short(_ name: String, maxLength: Int) -> String {
     let name = asciiLabel(name)
-    return name.count > 18 ? name.prefix(16).trimmingCharacters(in: .whitespaces) + ".." : name
+    return name.count > maxLength ? name.prefix(maxLength - 2).trimmingCharacters(in: .whitespaces) + ".." : name
   }
 }

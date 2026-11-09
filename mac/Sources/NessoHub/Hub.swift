@@ -14,6 +14,8 @@ final class Hub {
   private var lastPage: String?
   private var lastPixels: String?
   private var timer: Timer?
+  /// As the Nesso last said it is turned.
+  private var screen = Screen.upright
 
   init(link: Link, contexts: [HubContext], indicator: HubIndicator? = nil) {
     self.link = link
@@ -55,7 +57,7 @@ final class Hub {
       onContextChange?()
     }
     guard link.isReady else { return }
-    send(Wire.encode(active.page(icons: icons)), last: &lastPage)
+    send(Wire.encode(active.page(icons: icons, screen: screen)), last: &lastPage)
     if let indicator { send(Wire.encode(indicator.pixels()), last: &lastPixels) }
   }
 
@@ -76,6 +78,9 @@ final class Hub {
       let px = event.px ?? 0
       log("hub", "Nesso firmware \(event.fw ?? "?"), protocol \(event.proto ?? 0), \(px > 0 ? "\(px) pixels" : "no pixels")")
       if event.proto != Wire.version { log("hub", "protocol mismatch: the Mac speaks \(Wire.version)") }
+      turned(event)
+    case "screen":
+      turned(event)
     case "tap":
       guard let id = event.id else { return }
       log("hub", "tap \(id) -> \(current?.name ?? "-")")
@@ -91,5 +96,16 @@ final class Hub {
     default:
       log("hub", "unknown message \(event.t)")
     }
+  }
+
+  /// Lays the page out again when the Nesso's screen has turned.
+  private func turned(_ event: Event) {
+    guard let w = event.w, let h = event.h, w > 0, h > 0 else { return }
+    let size = Screen(w: w, h: h)
+    guard size != screen else { return }
+    log("hub", "screen \(w)x\(h)")
+    screen = size
+    lastPage = nil
+    render()
   }
 }

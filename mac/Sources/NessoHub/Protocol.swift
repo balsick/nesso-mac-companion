@@ -5,13 +5,14 @@ import Foundation
 /// JSON object per line; see README.md for the message list.
 enum Wire {
   /// Must match HUB_PROTOCOL_VERSION in firmware/NessoHub/config.h.
-  static let version = 2
+  static let version = 3
   static let service = CBUUID(string: "8c3b0001-5b1e-4c39-9d5e-6f1a7e2b9c40")
   /// The Mac writes here.
   static let rx = CBUUID(string: "8c3b0002-5b1e-4c39-9d5e-6f1a7e2b9c40")
   /// The Nesso notifies here.
   static let tx = CBUUID(string: "8c3b0003-5b1e-4c39-9d5e-6f1a7e2b9c40")
 
+  /// The screen the right way up.
   static let screenWidth = 135
   static let screenHeight = 240
 
@@ -21,6 +22,18 @@ enum Wire {
     let data = (try? encoder.encode(value)) ?? Data("{}".utf8)
     return String(decoding: data, as: UTF8.self)
   }
+}
+
+/// The Nesso's screen as it is turned now. The Nesso turns it to whichever
+/// side is up and says so, in `hello` and in `screen`.
+struct Screen: Equatable {
+  var w: Int
+  var h: Int
+
+  /// On its side: 240 x 135.
+  var isWide: Bool { w > h }
+
+  static let upright = Screen(w: Wire.screenWidth, h: Wire.screenHeight)
 }
 
 /// One tile on the Nesso. Tiles in a row share its width equally.
@@ -89,8 +102,8 @@ struct Page: Encodable, Equatable {
   static func == (a: Page, b: Page) -> Bool { Wire.encode(a) == Wire.encode(b) }
 }
 
-/// The Modulino Pixels: one entry per LED from the left; the LEDs past the end
-/// of `leds` stay dark.
+/// The Modulino Pixels: one entry per LED from the left, or from the top with
+/// the Nesso on its side; the LEDs past the end of `leds` stay dark.
 struct Pixels: Encodable, Equatable {
   let t = "pixels"
   /// Brightness, 0 to 31.
@@ -122,4 +135,7 @@ struct Event: Decodable {
   let proto: Int?
   /// How many LEDs the Nesso has on its Qwiic port: 0 without a Modulino Pixels.
   let px: Int?
+  /// The screen's size as it is turned now, in `hello` and `screen`.
+  let w: Int?
+  let h: Int?
 }

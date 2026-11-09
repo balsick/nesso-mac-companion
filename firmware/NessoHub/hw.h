@@ -13,6 +13,22 @@ namespace hw {
 
 void begin();
 
+// The screen as it is turned now: PANEL_W x PANEL_H the right way up or
+// upside down, the other way round on its side. Rotations as in config.h.
+uint8_t rotation();
+int16_t width();
+int16_t height();
+void rotate(uint8_t rotation);
+
+// Turns the screen to whichever side is up, from the accelerometer. Returns
+// true when it turned. Does nothing while auto-rotation is off.
+bool pollRotation();
+void setAutoRotate(bool on);
+bool autoRotate();
+// The accelerometer, for the console: the raw reading in g, and the rotation
+// it calls for, or -1 when no side is clearly up.
+bool readImu(float& x, float& y, float& z, int8_t& wants);
+
 struct TouchPoint {
   int16_t x = 0;
   int16_t y = 0;

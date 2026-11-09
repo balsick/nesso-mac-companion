@@ -5,8 +5,8 @@
 
 // --- Protocol -------------------------------------------------------------
 // Must match Protocol.version in mac/Sources/NessoHub/Protocol.swift.
-#define HUB_PROTOCOL_VERSION 2
-#define HUB_FIRMWARE_VERSION "0.3.0"
+#define HUB_PROTOCOL_VERSION 3
+#define HUB_FIRMWARE_VERSION "0.4.0"
 
 // Kept to 8 characters: the 128-bit service UUID already takes 18 of the 31
 // advertising bytes.
@@ -27,28 +27,33 @@
 #define RX_LINE_MAX 12288
 
 // --- Screen ---------------------------------------------------------------
-#define SCREEN_W 135
-#define SCREEN_H 240
+// The panel the right way up. On its side the screen is PANEL_H x PANEL_W,
+// and the Mac lays its pages out for that.
+#define PANEL_W 135
+#define PANEL_H 240
 
-// Set to 1 for a Nesso used upside down: turned 180° in the plane of the
-// screen, with the USB-C end on top, as in a back shell that holds the
-// Modulino Pixels above the Nesso with the cable going up. The screen turns,
-// taps follow it, and KEY1 and KEY2 keep their roles.
-// arduino-cli can also set it: --build-property
-// compiler.cpp.extra_flags=-DMOUNT_UPSIDE_DOWN=1
-#ifndef MOUNT_UPSIDE_DOWN
-#define MOUNT_UPSIDE_DOWN 0
+// LovyanGFX's rotations: 0 with the USB-C end down, 1 with it on the right,
+// 2 upside down, 3 with it on the left. The driver moves the panel's window
+// inside the controller's 240 x 320 memory for each, so nothing shifts.
+// KEY1 and KEY2 keep their roles whichever way the Nesso is turned.
+//
+// With AUTO_ROTATE the accelerometer picks the rotation, and the screen
+// turns to whichever side is up; SCREEN_ROTATION is where it starts when the
+// Nesso lies flat. With AUTO_ROTATE 0 the screen stays at SCREEN_ROTATION.
+// arduino-cli can also set them: --build-property
+// "compiler.cpp.extra_flags=-DAUTO_ROTATE=0 -DSCREEN_ROTATION=2"
+#ifndef SCREEN_ROTATION
+#define SCREEN_ROTATION 0
+#endif
+#ifndef AUTO_ROTATE
+#define AUTO_ROTATE 1
 #endif
 
-// 2 is a half turn. The panel stays 135 x 240, and the driver mirrors its
-// window inside the controller's 240 x 320 memory, so nothing shifts.
-#define SCREEN_ROTATION (MOUNT_UPSIDE_DOWN ? 2 : 0)
-
-// The touch controller reports in the screen's rotation-0 frame; a half turn
-// mirrors both axes.
-#define TOUCH_SWAP_XY 0
-#define TOUCH_INVERT_X MOUNT_UPSIDE_DOWN
-#define TOUCH_INVERT_Y MOUNT_UPSIDE_DOWN
+// A side is up once it takes this much of gravity, in g, and beats the
+// other side by ROTATE_MARGIN_G, for ROTATE_SETTLE_MS. Flat on a desk or
+// standing on a corner, the screen stays as it is.
+#define ROTATE_MIN_G 0.5f
+#define ROTATE_MARGIN_G 0.3f
 
 // --- Page limits ----------------------------------------------------------
 #define MAX_ROWS 8
@@ -71,6 +76,8 @@
 #define HOLD_DONE_MS 4000
 #define TOUCH_POLL_MS 20
 #define TOUCH_RELEASE_POLLS 3
+#define IMU_POLL_MS 100
+#define ROTATE_SETTLE_MS 600
 #define TAP_SLOP_PX 10
 #define BATTERY_POLL_MS 5000
 #define TAP_FLASH_MS 180
@@ -88,13 +95,14 @@
 #define PIXELS_BLINK_MS 1000
 // How often to look for a module that was not there.
 #define PIXELS_PROBE_MS 3000
-// The module's first LED is the one next to its green power LED. The default
-// is for a Modulino below the Nesso with that LED on the right: the order is
-// reversed, so the first LED of a "pixels" message is on the left. Upside
-// down, the module turns with the Nesso and that end comes round to the left.
-// Flip this for a Modulino screwed on the other way round.
+// The module's first LED is the one next to its green power LED. 1 is for a
+// Modulino below the Nesso with that LED on the right at rotation 0: the
+// order is reversed, so the first LED of a "pixels" message is on the left.
+// The module turns with the Nesso and the order follows the rotation; on its
+// side, where the bar stands upright, the first LED is the top one. Set it
+// to 0 for a Modulino screwed on the other way round.
 #ifndef PIXELS_REVERSE
-#define PIXELS_REVERSE (!MOUNT_UPSIDE_DOWN)
+#define PIXELS_REVERSE 1
 #endif
 
 // --- Colours (RGB565) -----------------------------------------------------

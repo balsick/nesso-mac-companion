@@ -76,19 +76,21 @@ arduino-cli lib install Arduino_Nesso_N1 ArduinoJson
 arduino-cli compile -b esp32:esp32:arduino_nesso_n1 -u -p /dev/cu.usbmodem101 firmware/NessoHub
 ```
 
-For a Nesso used upside down, with the USB-C end on top, set
-`MOUNT_UPSIDE_DOWN` to 1 in `firmware/NessoHub/config.h`, or pass it when
-building:
+The screen turns to whichever side is up, from the Nesso's accelerometer:
+upright, upside down, or on its side either way, where it is 240 x 135 and
+the Mac lays its pages out for that. Taps follow it, KEY1 and KEY2 keep their
+roles, and the Modulino Pixels keeps its first LED on the left, or at the top
+on its side. Flat on a desk the screen stays as it was. To keep it one way
+instead, set `AUTO_ROTATE` to 0 and `SCREEN_ROTATION` in `config.h`, or pass
+them when building:
 
 ```sh
-arduino-cli compile -b esp32:esp32:arduino_nesso_n1 --build-property compiler.cpp.extra_flags=-DMOUNT_UPSIDE_DOWN=1 -u -p /dev/cu.usbmodem101 firmware/NessoHub
+arduino-cli compile -b esp32:esp32:arduino_nesso_n1 --build-property "compiler.cpp.extra_flags=-DAUTO_ROTATE=0 -DSCREEN_ROTATION=2" -u -p /dev/cu.usbmodem101 firmware/NessoHub
 ```
 
-The screen and the touch turn half way round, and the Modulino Pixels LEDs
-keep their left-to-right order.
-
 Over USB it also has a serial console (`status`, `screen`, `tap <x> <y>`,
-`press <key> [ms]`, or a JSON message as if the Mac had sent it). `tools/` talks to it with nothing but
+`press <key> [ms]`, `rotate <0-3|auto>`, `imu`, or a JSON message as if the
+Mac had sent it). `tools/` talks to it with nothing but
 the Python standard library:
 
 ```sh
@@ -275,13 +277,14 @@ Mac → Nesso:
 | `hello` | | Asks the Nesso to introduce itself. |
 | `page` | `title`, `sub`, `accent`, `rows: [{h, tiles: [{id, label, icon, bg, fg, font}]}]`, `holds: [{k, label, done, icon, bg}]` | Replaces the screen. Tiles share their row's width; `font` is `s`, `m`, `l` or `xl`. A key in `holds` becomes hold-to-confirm: see below. |
 | `icon` | `id`, `w`, `h`, `f`, `d` | An icon a page refers to: `f` is `rgb565` (big-endian) or `a8` (a mask tinted with the tile's `fg`), `d` is base64. |
-| `pixels` | `b`, `leds: [{c, fx}]` | What the Modulino Pixels shows, one entry per LED from the left; the rest go dark. `c` is `#RRGGBB`, `fx` is `pulse`, `blink` or absent for a steady light, `b` is the brightness, 0 to 31. The LEDs also go dark when the Mac disconnects. |
+| `pixels` | `b`, `leds: [{c, fx}]` | What the Modulino Pixels shows, one entry per LED from the left (from the top when the Nesso is on its side); the rest go dark. `c` is `#RRGGBB`, `fx` is `pulse`, `blink` or absent for a steady light, `b` is the brightness, 0 to 31. The LEDs also go dark when the Mac disconnects. |
 
 Nesso → Mac:
 
 | `t` | Fields | |
 |---|---|---|
-| `hello` | `fw`, `proto`, `w`, `h`, `px` | Firmware and protocol version, screen size, and how many LEDs it has: 8 with a Modulino Pixels, 0 without. |
+| `hello` | `fw`, `proto`, `w`, `h`, `px` | Firmware and protocol version, screen size as the screen is turned now, and how many LEDs it has: 8 with a Modulino Pixels, 0 without. |
+| `screen` | `w`, `h` | The screen turned: 135 x 240 upright or upside down, 240 x 135 on its side. Pages from now on should fit it; the Nesso keeps the old one's row heights until then. |
 | `need` | `ids` | Icons a page uses that the Nesso does not have. |
 | `tap` | `id` | A tile with an `id` was tapped. |
 | `key` | `k`, `a` | Side key `1` or `2`, action `click` or `long`. |

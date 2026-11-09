@@ -98,24 +98,30 @@ final class MeetContext: HubContext {
     }
   }
 
-  func page(icons: IconStore) -> Page {
-    if let failure { return failurePage(failure) }
+  func page(icons: IconStore, screen: Screen) -> Page {
+    if let failure { return failurePage(failure, screen: screen) }
     guard let state else { return Page(title: "Meet", rows: []) }
 
-    var rows = [Row(h: 76, tiles: [
+    let showReactions = state.inCall && state.reactions && !reactions.isEmpty
+    // On its side the screen is 135px tall: the toggles shrink to leave a
+    // row for the reactions.
+    let short = screen.isWide && showReactions
+    let toggleH = short ? 44 : 76, toggleIcon = short ? 22 : 34
+    var rows = [Row(h: toggleH, tiles: [
       toggle(id: "mic", on: state.mic, onSymbol: "mic.fill", offSymbol: "mic.slash.fill",
-             onLabel: "MIC", offLabel: "MUTED", icons: icons),
+             onLabel: "MIC", offLabel: "MUTED", iconSize: toggleIcon, icons: icons),
       toggle(id: "cam", on: state.cam, onSymbol: "video.fill", offSymbol: "video.slash.fill",
-             onLabel: "CAM", offLabel: "OFF", icons: icons),
+             onLabel: "CAM", offLabel: "OFF", iconSize: toggleIcon, icons: icons),
     ])]
 
-    if state.inCall && state.reactions && !reactions.isEmpty {
-      let perRow = 3
+    if showReactions {
+      let perRow = screen.isWide ? 6 : 3
       let rowCount = (reactions.count + perRow - 1) / perRow
       // Whatever is left under the toggles, split between the reaction rows.
-      let free = Wire.screenHeight - 20 - 14 - 4 - 80 - 4 * rowCount
+      let free = screen.h - 20 - 14 - 4 - (toggleH + 4) - 4 * rowCount
       let h = min(48, free / rowCount)
-      let size = min(32, h - 10)
+      let tileW = (screen.w - 8 - 4 * (perRow - 1)) / perRow
+      let size = min(32, h - 10, tileW - 6)
       for start in stride(from: 0, to: reactions.count, by: perRow) {
         let tiles = reactions[start..<min(start + perRow, reactions.count)].map { emoji in
           Tile(id: "r:\(emoji)", icon: icons.emoji(emoji, size: size, bg: Palette.tile), bg: Palette.tile)
@@ -253,21 +259,23 @@ final class MeetContext: HubContext {
   // MARK: Page pieces
 
   private func toggle(id: String, on: Bool?, onSymbol: String, offSymbol: String, onLabel: String,
-                      offLabel: String, icons: IconStore) -> Tile {
+                      offLabel: String, iconSize: Int, icons: IconStore) -> Tile {
     guard let on else { return Tile(id: id, label: "?", bg: Palette.unknown, font: "l") }
-    return Tile(id: id, label: on ? onLabel : offLabel, icon: icons.symbol(on ? onSymbol : offSymbol, size: 34),
+    return Tile(id: id, label: on ? onLabel : offLabel,
+                icon: icons.symbol(on ? onSymbol : offSymbol, size: iconSize),
                 bg: on ? Palette.on : Palette.off, fg: Palette.text, font: "s")
   }
 
-  private func failurePage(_ failure: Browser.Failure) -> Page {
+  private func failurePage(_ failure: Browser.Failure, screen: Screen) -> Page {
     let lines: [String]
     switch failure {
     case .javascriptDisabled: lines = ["Chrome:", "View > Developer >", "Allow JavaScript", "from Apple Events"]
     case .notAuthorized: lines = ["Allow nesso-hub", "in Privacy >", "Automation"]
     case .script: lines = ["Script error,", "see the log"]
     }
+    // Four lines fit on its side at 20px each.
     return Page(title: "Meet", sub: "needs setup", accent: "#FFB300",
-                rows: lines.map { Row(h: 24, tiles: [Tile(label: $0, bg: "#000000", font: "s")]) })
+                rows: lines.map { Row(h: screen.isWide ? 20 : 24, tiles: [Tile(label: $0, bg: "#000000", font: "s")]) })
   }
 }
 

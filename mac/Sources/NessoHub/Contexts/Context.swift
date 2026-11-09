@@ -13,7 +13,8 @@ protocol HubContext: AnyObject {
 
   /// Called once a second. Reads whatever state the page depends on.
   func refresh()
-  func page(icons: IconStore) -> Page
+  /// Laid out for `screen`, which turns with the Nesso.
+  func page(icons: IconStore, screen: Screen) -> Page
   func handleTap(_ id: String)
   /// `key` is 1 or 2, `action` "click" or "long".
   func handleKey(_ key: Int, action: String)
